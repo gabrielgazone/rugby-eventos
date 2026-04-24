@@ -4,16 +4,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
-import json
+import numpy as np
 
 # Configuração da página
 st.set_page_config(
-    page_title="BIG Report - Rugby | Catapult Sports",
+    page_title="BIG Report - Rugby Analytics | Catapult Sports",
     page_icon="🏉",
     layout="wide"
 )
 
-# Estilo CSS para replicar a interface
+# Estilo CSS para melhor visualização
 st.markdown("""
     <style>
     .main-header {
@@ -28,12 +28,19 @@ st.markdown("""
         font-weight: bold;
         color: #2c5aa0;
         margin-top: 1rem;
+        margin-bottom: 1rem;
     }
     .metric-card {
         background-color: #f0f2f6;
         padding: 1rem;
         border-radius: 10px;
         text-align: center;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -42,273 +49,445 @@ st.markdown("""
 st.markdown('<div class="main-header">🏉 BIG Report - Análisis de Retorno a la Actividad</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ==================== SEÇÃO 1: Conexão API Catapult ====================
-@st.cache_data(ttl=300)
-def connect_catapult_api():
-    """
-    Conexão com a API da Catapult Sports
-    Você precisa configurar as credenciais no .streamlit/secrets.toml
-    """
-    try:
-        # Configuração de autenticação
-        api_key = st.secrets["CATAPULT_API_KEY"]
-        base_url = st.secrets.get("CATAPULT_BASE_URL", "https://api.catapult.com/v1")
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        return base_url, headers
-    except:
-        st.warning("⚠️ Credenciais da API não configuradas. Usando dados de exemplo.")
-        return None, None
+# ==================== FUNÇÕES DE CARREGAMENTO DE DADOS ====================
 
-# ==================== SEÇÃO 2: Seleção de Dados ====================
-st.sidebar.markdown("## 📂 Selección de Datos")
-
-# 1. Seleção de arquivo/clube (simulado por enquanto)
-st.sidebar.markdown("### 1. Archivo / Club")
-arquivos = [
-    "Club Estudiantes de La Plata - D...",
-    "CUBA (ID: b5dbe5fe-ea47-452d-...)",
-    "CULP (ID: c71f3d9b-688a-42d2-...)",
-    "Demo Futbol (ID: 8a9bfd0a-786-...)",
-    "DEMO General (ID: 75ffa20c-c10-...)"
-]
-selected_file = st.sidebar.selectbox("Seleccionar archivo", arquivos)
-
-# 2. Seleção de atividade
-st.sidebar.markdown("### 2. Seleccionar Actividad")
-dias_mostrar = st.sidebar.slider("Mostrar actividades de los últimos días:", 7, 90, 90)
-
-# Botão carregar atividades
-if st.sidebar.button("🔄 Cargar Actividades"):
-    st.sidebar.success("Actividades cargadas!")
-
-# Lista de atividades (baseada nos prints)
-atividades = [
-    "Choiques Acel - 08/03/2026 14:2...",
-    "Activity 20250813142416 - 13/0...",
-    "Activity 20250813142307 - 13/0...",
-    "Activity 20250813142304 - 13/0...",
-    "Activity 20250813125720 - 13/08/2025 15:57",
-    "Act. de anotación del año"
-]
-selected_activity = st.sidebar.selectbox("Seleccionar actividad", atividades)
-
-# 3. Seleção de atleta
-st.sidebar.markdown("### 3. Seleccionar Atleta")
-if st.sidebar.button("👥 Cargar Atletas de la Actividad"):
-    st.sidebar.info("Atletas cargados!")
-
-# Lista de atletas (baseada nos prints)
-atletas = {
-    "Agustin Dublo - #010": "ID: 825...",
-    "Ignacio Diaz - #005": "ID: b46cb...",
-    "Ignacio Fadul - #012": "ID: 684...",
-    "Juan Martin Godoy - #009": "ID: ...",
-    "Juan Pedro Ramognino - #004": "ID: ...",
-    "Leonardo Gallardo - #000": "ID: ...",
-    "Mateo Cechi - #008": "ID: a9420...",
-    "Guido DE GENARO - #*24": "ID: ..."
-}
-
-selected_atleta = st.sidebar.selectbox("Seleccione un atleta:", list(atletas.keys()))
-
-# ==================== SEÇÃO 3: Dados de Exemplo ====================
-# Criando dados similares aos prints
 @st.cache_data
-def load_sample_data():
-    """Dados de exemplo replicando a estrutura dos prints"""
+def load_teams():
+    """Carrega lista de equipes"""
+    return [
+        "Estudiantes de La Plata",
+        "CUBA", 
+        "CULP",
+        "Selección Argentina",
+        "Los Pumas 7's"
+    ]
+
+@st.cache_data
+def load_players():
+    """Carrega lista de atletas por equipe"""
+    players = {
+        "Estudiantes de La Plata": [
+            "Agustin Dublo - #010",
+            "Ignacio Diaz - #005", 
+            "Ignacio Fadul - #012",
+            "Juan Martin Godoy - #009",
+            "Juan Pedro Ramognino - #004",
+            "Leonardo Gallardo - #000",
+            "Mateo Cechi - #008",
+            "Guido De Genaro - #*24"
+        ],
+        "CUBA": [
+            "Carlos Martinez - #001",
+            "Luis Rodriguez - #002",
+            "Jose Fernandez - #003"
+        ],
+        "CULP": [
+            "Miguel Gonzalez - #011",
+            "Pablo Suarez - #013",
+            "Diego Pérez - #014"
+        ],
+        "Selección Argentina": [
+            "Marcos Kremer - #001",
+            "Pablo Matera - #002",
+            "Julián Montoya - #003"
+        ],
+        "Los Pumas 7's": [
+            "Santiago Alvarez - #001",
+            "Tobias Wade - #002"
+        ]
+    }
+    return players
+
+@st.cache_data
+def load_activities():
+    """Carrega atividades disponíveis"""
+    dates = []
+    for i in range(30):
+        date = datetime.now() - timedelta(days=i)
+        dates.append(f"Activity {date.strftime('%Y%m%d%H%M%S')} - {date.strftime('%d/%m/%Y %H:%M')}")
+    return dates
+
+@st.cache_data
+def load_event_data(team, player, activity, days_period):
+    """Carrega dados de eventos com filtros aplicados"""
     
-    # Dados dos eventos (baseado no print)
+    np.random.seed(42)
+    
+    # Gerar número variável de eventos baseado nos filtros
+    if player:
+        n_events = np.random.randint(15, 45)
+    else:
+        n_events = np.random.randint(30, 80)
+    
+    # Gerar eventos
+    base_time = datetime.now() - timedelta(days=np.random.randint(1, days_period))
+    start_times = []
+    current_time = base_time
+    
+    for i in range(n_events):
+        delta = timedelta(seconds=np.random.randint(30, 300))
+        start_times.append(current_time.timestamp())
+        current_time += delta
+    
+    # Criar dataframe
     eventos_data = {
-        "tipo_evento": ["Contact"] * 10,
-        "end_time": [1648924488.68, 1648924631.92, 1648924694.87, 1648924821.9, 
-                     1648924925.61, 1648924987.08, 1648925082.09, 1648925108.44, 
-                     1648925126.22, 1649024730.50],
-        "start_time": [1648924487.66, 1648924616.96, 1648924687.29, 1648924819.64, 
-                       1648924922.5, 1648924981.61, 1648925079.88, 1648925106.12, 
-                       1648925110.49, 1649024732.52],
-        "duration_min": [0.0172, 0.2495, 0.1265, 0.0378, 0.052, 0.0913, 0.037, 0.0388, 0.2623, 0.1057],
-        "back_in_game_min": [2.138, 0.9228, 2.0795, 1.6767, 0.9333, 1.5467, 0.4005, 0.0342, 5.7857, 0.541],
-        "confidence": [0.978, 1, 1, 0.98, 0.996, 0.998, 1, 0.974, 0.97, 0.974]
+        "tipo_evento": np.random.choice(["Contact", "Tackle", "Ruck", "Maul", "Scrum", "Lineout"], n_events),
+        "end_time": [t + np.random.uniform(2, 15) for t in start_times],
+        "start_time": start_times,
+        "duration_min": np.random.uniform(0.01, 0.35, n_events),
+        "back_in_game_min": np.random.uniform(0.03, 6.0, n_events),
+        "confidence": np.random.uniform(0.95, 1.0, n_events),
+        "pos_x": np.random.uniform(0, 100, n_events),
+        "pos_y": np.random.uniform(0, 70, n_events),
+        "equipe": team,
+        "atleta": player if player else "Todos",
+        "atividade": activity
     }
     
-    df_eventos = pd.DataFrame(eventos_data)
+    df = pd.DataFrame(eventos_data)
     
-    # Calcular métricas resumidas
-    total_eventos = len(df_eventos)
-    tempo_medio_entre = df_eventos["back_in_game_min"].mean()
-    duracao_media = df_eventos["duration_min"].mean()
-    carga_total = df_eventos["duration_min"].sum()
+    # Ordenar por tempo
+    df = df.sort_values('start_time')
     
-    return df_eventos, total_eventos, tempo_medio_entre, duracao_media, carga_total
+    return df
 
-df_eventos, total_eventos, tempo_medio, duracao_media, carga_total = load_sample_data()
+# ==================== FUNÇÃO DO CAMPO DE RUGBY ====================
 
-# ==================== SEÇÃO 4: Dashboard Principal ====================
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown('<div class="sub-header">📊 Back in Game</div>', unsafe_allow_html=True)
+def create_rugby_field():
+    """Cria um campo de rugby com dimensões oficiais (100m x 70m)"""
     
-    # Métricas principais
-    col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+    # Dimensões oficiais (em metros)
+    field_length = 100  # Comprimento total
+    field_width = 70    # Largura total
     
-    with col_metric1:
-        st.metric("Total eventos BIG", total_eventos)
-    with col_metric2:
-        st.metric("Tiempo medio entre eventos (min)", f"{tempo_medio:.2f}")
-    with col_metric3:
-        st.metric("Duración media por evento (min)", f"{duracao_media:.2f}")
-    with col_metric4:
-        st.metric("Carga total de actividad (min)", f"{carga_total:.2f}")
+    # Zonas
+    in_goal_length = 10  # Área de in-goal (10m cada lado)
+    total_length = field_length + (2 * in_goal_length)  # 120m total
+    
+    fig = go.Figure()
+    
+    # 1. Área de jogo (gramado)
+    fig.add_shape(type="rect",
+                  x0=0, x1=field_length,
+                  y0=0, y1=field_width,
+                  fillcolor="lightgreen",
+                  line=dict(color="black", width=2),
+                  layer="below")
+    
+    # 2. Linha de meio-campo (50m)
+    fig.add_shape(type="line",
+                  x0=field_length/2, x1=field_length/2,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=3))
+    
+    # 3. Linhas de 22m (a 22m de cada linha de fundo)
+    fig.add_shape(type="line",
+                  x0=22, x1=22,
+                  y0=0, y1=field_width,
+                  line=dict(color="red", width=2, dash="dash"))
+    
+    fig.add_shape(type="line",
+                  x0=field_length-22, x1=field_length-22,
+                  y0=0, y1=field_width,
+                  line=dict(color="red", width=2, dash="dash"))
+    
+    # 4. Linhas de 10m
+    fig.add_shape(type="line",
+                  x0=10, x1=10,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=1, dash="dot"))
+    
+    fig.add_shape(type="line",
+                  x0=field_length-10, x1=field_length-10,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=1, dash="dot"))
+    
+    # 5. Linhas de touch (laterais)
+    fig.add_shape(type="rect",
+                  x0=0, x1=field_length,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=3),
+                  fillcolor=None)
+    
+    # 6. Traves (simplificadas nas linhas de fundo)
+    fig.add_shape(type="line",
+                  x0=field_length, x1=field_length,
+                  y0=field_width/2 - 5, y1=field_width/2 + 5,
+                  line=dict(color="yellow", width=3))
+    
+    fig.add_shape(type="line",
+                  x0=0, x1=0,
+                  y0=field_width/2 - 5, y1=field_width/2 + 5,
+                  line=dict(color="yellow", width=3))
+    
+    # Configurar layout
+    fig.update_layout(
+        title="🏟️ Campo de Rugby - Dimensões Oficiais (100m x 70m)",
+        xaxis=dict(title="Comprimento (metros)", 
+                   range=[-5, field_length+5],
+                   showgrid=True,
+                   gridcolor="lightgray"),
+        yaxis=dict(title="Largura (metros)",
+                   range=[-5, field_width+5],
+                   showgrid=True,
+                   gridcolor="lightgray"),
+        plot_bgcolor="lightgreen",
+        height=550,
+        hovermode='closest'
+    )
+    
+    # Adicionar anotações
+    annotations = [
+        dict(x=field_length/2, y=field_width + 3, text="🏉 Línea de Medio Campo (50m)", showarrow=False, font=dict(size=10, color="blue")),
+        dict(x=11, y=field_width + 3, text="Línea de 22m", showarrow=False, font=dict(size=9, color="red")),
+        dict(x=field_length-11, y=field_width + 3, text="Línea de 22m", showarrow=False, font=dict(size=9, color="red")),
+        dict(x=5, y=field_width/2, text="10m", showarrow=False, font=dict(size=8, color="darkblue")),
+        dict(x=field_length-5, y=field_width/2, text="10m", showarrow=False, font=dict(size=8, color="darkblue")),
+        dict(x=-3, y=field_width/2, text="🏉 In-Goal", showarrow=False, font=dict(size=9, color="darkgreen")),
+        dict(x=field_length+3, y=field_width/2, text="🏉 In-Goal", showarrow=False, font=dict(size=9, color="darkgreen"))
+    ]
+    
+    fig.update_layout(annotations=annotations)
+    
+    return fig, field_length, field_width
 
-with col2:
-    st.markdown('<div class="sub-header">📞 Contacto</div>', unsafe_allow_html=True)
-    st.info("**Juan Calvo**\ncalvoj550@gmail.com")
+# ==================== BARRA LATERAL COM FILTROS ====================
 
-# ==================== SEÇÃO 5: Campo de Rugby (Heatmap) ====================
-st.markdown('<div class="sub-header">🏟️ Mapa de Actividad en Campo</div>', unsafe_allow_html=True)
+st.sidebar.markdown("## 📂 Filtros de Dados")
 
-# Criando visualização do campo de rugby
-fig_campo = go.Figure()
-
-# Adicionar linha do campo (70m de largura)
-campo_width = 70
-campo_height = 100
-
-# Linhas do campo
-# Linha de touch (laterais)
-fig_campo.add_shape(type="line", x0=0, x1=0, y0=0, y1=campo_height, line=dict(color="white", width=2))
-fig_campo.add_shape(type="line", x0=campo_width, x1=campo_width, y0=0, y1=campo_height, line=dict(color="white", width=2))
-
-# Linha de 22m
-fig_campo.add_shape(type="line", x0=22, x1=22, y0=0, y1=campo_height, line=dict(color="yellow", width=2, dash="dash"))
-fig_campo.add_shape(type="line", x0=campo_width-22, x1=campo_width-22, y0=0, y1=campo_height, line=dict(color="yellow", width=2, dash="dash"))
-
-# Mitad de cancha
-fig_campo.add_shape(type="line", x0=campo_width/2, x1=campo_width/2, y0=0, y1=campo_height, line=dict(color="red", width=3, dash="dash"))
-
-# Dados simulados de calor (posições dos eventos)
-import numpy as np
-np.random.seed(42)
-n_eventos_heatmap = 50
-x_positions = np.random.uniform(0, campo_width, n_eventos_heatmap)
-y_positions = np.random.uniform(0, campo_height, n_eventos_heatmap)
-
-fig_campo.add_trace(go.Scatter(
-    x=x_positions,
-    y=y_positions,
-    mode='markers',
-    marker=dict(
-        size=8,
-        color=np.random.uniform(0, 1, n_eventos_heatmap),
-        colorscale='Hot',
-        showscale=True,
-        colorbar=dict(title="Intensidad")
-    ),
-    name='Eventos'
-))
-
-fig_campo.update_layout(
-    plot_bgcolor='green',
-    paper_bgcolor='lightgray',
-    xaxis=dict(range=[-5, campo_width+5], title="Ancho del campo (m)", showgrid=False),
-    yaxis=dict(range=[-5, campo_height+5], title="Largo del campo (m)", showgrid=False),
-    height=500,
-    title="Línea de touch (ancho: 70m) | Línea de 22m | Mitad de cancha"
+# 1. Filtro de Período
+st.sidebar.markdown("### 📅 Período")
+dias_periodo = st.sidebar.slider(
+    "Mostrar actividades de los últimos días:",
+    min_value=7,
+    max_value=180,
+    value=90,
+    step=7
 )
 
-# Adicionar anotações das linhas
-fig_campo.add_annotation(x=11, y=-3, text="Línea de 22m", showarrow=False, font=dict(size=10, color="white"))
-fig_campo.add_annotation(x=campo_width/2, y=-3, text="Mitad de cancha", showarrow=False, font=dict(size=10, color="white"))
-fig_campo.add_annotation(x=campo_width-11, y=-3, text="Línea de 22m", showarrow=False, font=dict(size=10, color="white"))
+# 2. Filtro de Equipe
+st.sidebar.markdown("### 🏆 Equipe")
+teams = load_teams()
+selected_team = st.sidebar.selectbox("Seleccionar Equipo:", ["Todos"] + teams)
+
+# 3. Filtro de Atleta (dinâmico baseado na equipe)
+st.sidebar.markdown("### 👤 Atleta")
+players_dict = load_players()
+
+if selected_team != "Todos":
+    available_players = players_dict.get(selected_team, [])
+else:
+    available_players = []
+    for team_players in players_dict.values():
+        available_players.extend(team_players)
+    available_players = list(set(available_players))
+
+available_players.insert(0, "Todos")
+selected_player = st.sidebar.selectbox("Seleccionar Atleta:", available_players)
+
+# 4. Filtro de Atividade
+st.sidebar.markdown("### 📋 Actividad")
+activities = load_activities()
+selected_activity = st.sidebar.selectbox(
+    "Seleccionar Actividad:",
+    ["Última Atividade"] + activities[:20]
+)
+
+# 5. Filtro de Tipo de Evento
+st.sidebar.markdown("### 🎯 Tipo de Evento")
+event_types = ["Todos", "Contact", "Tackle", "Ruck", "Maul", "Scrum", "Lineout"]
+selected_event_type = st.sidebar.selectbox("Filtrar por evento:", event_types)
+
+# Botão de reset
+if st.sidebar.button("🔄 Resetar Filtros"):
+    st.rerun()
+
+# Carregar dados com base nos filtros
+df = load_event_data(selected_team, selected_player if selected_player != "Todos" else None, selected_activity, dias_periodo)
+
+# Aplicar filtro de tipo de evento
+if selected_event_type != "Todos":
+    df = df[df["tipo_evento"] == selected_event_type]
+
+# Mostrar informações dos filtros aplicados
+st.sidebar.markdown("---")
+st.sidebar.markdown(f"**📊 Total de Eventos:** {len(df)}")
+st.sidebar.markdown(f"**📅 Período:** {dias_periodo} días")
+if selected_team != "Todos":
+    st.sidebar.markdown(f"**🏆 Equipo:** {selected_team}")
+if selected_player != "Todos":
+    st.sidebar.markdown(f"**👤 Atleta:** {selected_player}")
+
+# ==================== DASHBOARD PRINCIPAL ====================
+
+# Métricas resumidas
+if len(df) > 0:
+    total_eventos = len(df)
+    tempo_medio_entre = df["back_in_game_min"].mean()
+    duracao_media = df["duration_min"].mean()
+    carga_total = df["duration_min"].sum()
+    confianca_media = df["confidence"].mean()
+else:
+    total_eventos = 0
+    tempo_medio_entre = 0
+    duracao_media = 0
+    carga_total = 0
+    confianca_media = 0
+
+# Cards de métricas
+col1, col2, col3, col4, col5 = st.columns(5)
+
+with col1:
+    st.metric("Total Eventos BIG", total_eventos)
+with col2:
+    st.metric("Tempo Médio Entre Eventos (min)", f"{tempo_medio_entre:.2f}")
+with col3:
+    st.metric("Duração Média por Evento (min)", f"{duracao_media:.2f}")
+with col4:
+    st.metric("Carga Total (min)", f"{carga_total:.2f}")
+with col5:
+    st.metric("Confiança Média", f"{confianca_media:.3f}")
+
+# ==================== CAMPO DE RUGBY COM EVENTOS ====================
+
+st.markdown('<div class="sub-header">🏟️ Mapa de Calor - Atividade no Campo</div>', unsafe_allow_html=True)
+
+# Criar campo
+fig_campo, field_len, field_wid = create_rugby_field()
+
+# Adicionar pontos dos eventos
+if len(df) > 0 and 'pos_x' in df.columns and 'pos_y' in df.columns:
+    # Normalizar coordenadas para o campo (0-100m x 0-70m)
+    scatter = fig_campo.add_trace(go.Scatter(
+        x=df['pos_x'],
+        y=df['pos_y'],
+        mode='markers',
+        marker=dict(
+            size=df['duration_min'] * 30,  # Tamanho baseado na duração
+            color=df['confidence'],
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Confiança"),
+            opacity=0.7,
+            line=dict(width=1, color='black')
+        ),
+        text=[f"Evento: {row['tipo_evento']}<br>Duração: {row['duration_min']:.2f}min<br>Conf: {row['confidence']:.3f}" 
+              for _, row in df.iterrows()],
+        hoverinfo='text',
+        name='Eventos'
+    ))
 
 st.plotly_chart(fig_campo, use_container_width=True)
 
-# ==================== SEÇÃO 6: Detalle de Eventos ====================
-st.markdown('<div class="sub-header">📋 Detalle de eventos</div>', unsafe_allow_html=True)
+# ==================== TABELA DE EVENTOS ====================
 
-# Formatar dataframe para exibição
-df_display = df_eventos.copy()
-df_display["end_time"] = pd.to_datetime(df_display["end_time"], unit='s')
-df_display["start_time"] = pd.to_datetime(df_display["start_time"], unit='s')
-df_display["duration_min"] = df_display["duration_min"].round(4)
-df_display["back_in_game_min"] = df_display["back_in_game_min"].round(4)
-df_display["confidence"] = df_display["confidence"].round(3)
+st.markdown('<div class="sub-header">📋 Detalle de Eventos</div>', unsafe_allow_html=True)
 
-st.dataframe(
-    df_display,
-    use_container_width=True,
-    column_config={
-        "tipo_evento": "Tipo de Evento",
-        "end_time": "Fin del Evento",
-        "start_time": "Inicio del Evento", 
-        "duration_min": "Duración (min)",
-        "back_in_game_min": "Back in Game (min)",
-        "confidence": "Confianza"
-    }
-)
-
-# ==================== SEÇÃO 7: Gráficos Adicionais ====================
-st.markdown('<div class="sub-header">📈 Análisis de Eventos</div>', unsafe_allow_html=True)
-
-col_graf1, col_graf2 = st.columns(2)
-
-with col_graf1:
-    # Gráfico de duração dos eventos
-    fig_duration = px.bar(
-        x=range(len(df_eventos)), 
-        y=df_eventos["duration_min"],
-        title="Duración por Evento (minutos)",
-        labels={"x": "Número de Evento", "y": "Duración (min)"}
+# Preparar dataframe para exibição
+df_display = df.copy()
+if len(df_display) > 0:
+    df_display["start_time_dt"] = pd.to_datetime(df_display["start_time"], unit='s')
+    df_display["end_time_dt"] = pd.to_datetime(df_display["end_time"], unit='s')
+    df_display["duration_min"] = df_display["duration_min"].round(4)
+    df_display["back_in_game_min"] = df_display["back_in_game_min"].round(4)
+    df_display["confidence"] = df_display["confidence"].round(3)
+    
+    # Selecionar colunas para exibir
+    display_cols = ['tipo_evento', 'start_time_dt', 'end_time_dt', 'duration_min', 'back_in_game_min', 'confidence']
+    if 'equipe' in df_display.columns:
+        display_cols.insert(1, 'equipe')
+    if 'atleta' in df_display.columns and selected_player == "Todos":
+        display_cols.insert(2, 'atleta')
+    
+    st.dataframe(
+        df_display[display_cols],
+        use_container_width=True,
+        column_config={
+            "tipo_evento": "Tipo de Evento",
+            "equipe": "Equipe",
+            "atleta": "Atleta",
+            "start_time_dt": "Inicio",
+            "end_time_dt": "Fin",
+            "duration_min": "Duración (min)",
+            "back_in_game_min": "Back in Game (min)",
+            "confidence": "Confianza"
+        }
     )
-    fig_duration.update_traces(marker_color='steelblue')
-    st.plotly_chart(fig_duration, use_container_width=True)
 
-with col_graf2:
-    # Gráfico de tempo entre eventos (back in game)
-    fig_big = px.line(
-        x=range(len(df_eventos)),
-        y=df_eventos["back_in_game_min"],
-        title="Tiempo entre Eventos - Back in Game",
-        labels={"x": "Evento", "y": "Tiempo (min)"}
-    )
-    fig_big.update_traces(line=dict(color='orange', width=2))
-    st.plotly_chart(fig_big, use_container_width=True)
+# ==================== GRÁFICOS ADICIONAIS ====================
 
-# ==================== SEÇÃO 8: Footer ====================
+if len(df) > 0:
+    st.markdown('<div class="sub-header">📈 Análise de Eventos</div>', unsafe_allow_html=True)
+    
+    col_graf1, col_graf2 = st.columns(2)
+    
+    with col_graf1:
+        # Distribuição por tipo de evento
+        event_counts = df['tipo_evento'].value_counts()
+        fig_pie = px.pie(
+            values=event_counts.values,
+            names=event_counts.index,
+            title="Distribución por Tipo de Evento",
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+    
+    with col_graf2:
+        # Duração por evento
+        fig_duration = px.bar(
+            x=range(min(len(df), 50)),
+            y=df['duration_min'].head(50),
+            title="Duración por Evento (minutos)",
+            labels={"x": "Número de Evento", "y": "Duración (min)"}
+        )
+        fig_duration.update_traces(marker_color='steelblue')
+        st.plotly_chart(fig_duration, use_container_width=True)
+    
+    # Gráfico de linha do tempo
+    col_graf3, col_graf4 = st.columns(2)
+    
+    with col_graf3:
+        fig_timeline = px.line(
+            x=range(len(df)),
+            y=df['back_in_game_min'],
+            title="Tiempo entre Eventos - Back in Game (minutos)",
+            labels={"x": "Secuencia de Eventos", "y": "Tiempo (min)"}
+        )
+        fig_timeline.update_traces(line=dict(color='orange', width=2))
+        st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    with col_graf4:
+        # Confiança por evento
+        fig_conf = px.scatter(
+            x=range(len(df)),
+            y=df['confidence'],
+            title="Confianza por Evento",
+            labels={"x": "Evento", "y": "Confianza"},
+            color=df['confidence'],
+            color_continuous_scale='RdYlGn'
+        )
+        st.plotly_chart(fig_conf, use_container_width=True)
+
+# ==================== FOOTER ====================
 st.markdown("---")
 st.caption("📡 Datos obtenidos via API de Catapult Sports | Dashboard BIG Report - Análisis de Retorno a la Actividad")
+st.caption("🏉 Campo con dimensiones oficiales World Rugby: 100m x 70m + áreas de in-goal")
 
-# ==================== CONEXÃO REAL COM API CATAPULT ====================
-def get_real_catapult_data(athlete_id, activity_id):
+# ==================== FUNÇÃO DA API CATAPULT (placeholder) ====================
+@st.cache_data(ttl=300)
+def connect_catapult_api():
     """
-    Função para buscar dados reais da API da Catapult
-    Documentação: https://developer.catapultsports.com/
+    Conexão com API da Catapult Sports
+    Configure as credenciais no .streamlit/secrets.toml
     """
-    base_url, headers = connect_catapult_api()
-    
-    if base_url and headers:
-        try:
-            # Endpoints comuns da API Catapult
-            # Endpoint para métricas de jogador
-            athlete_endpoint = f"{base_url}/athletes/{athlete_id}/metrics"
-            
-            # Buscar dados do atleta
-            response = requests.get(athlete_endpoint, headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Processar dados conforme necessidade
-                return data
-            else:
-                st.error(f"Erro na API: {response.status_code}")
-                return None
-        except Exception as e:
-            st.error(f"Erro de conexão: {str(e)}")
-            return None
-    
-    return None
+    try:
+        api_key = st.secrets.get("CATAPULT_API_KEY")
+        base_url = st.secrets.get("CATAPULT_BASE_URL", "https://api.catapult.com/v1")
+        
+        if api_key:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            return base_url, headers
+        else:
+            return None, None
+    except:
+        return None, None
