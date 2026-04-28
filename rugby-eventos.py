@@ -8,7 +8,7 @@ import json
 import base64
 import numpy as np
 
-st.set_page_config(page_title="BIG Report - Rugby Analytics | Catapult Sports", page_icon="🏉", layout="wide")
+st.set_page_config(page_title="BIG Report - Rugby Analytics", page_icon="🏉", layout="wide")
 
 st.markdown("""
 <style>
@@ -28,6 +28,7 @@ def decode_jwt(token):
     except:
         return None
 
+# Inicialização
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'api_headers' not in st.session_state:
@@ -58,12 +59,6 @@ if 'events_df' not in st.session_state:
     st.session_state.events_df = None
 if 'days_period' not in st.session_state:
     st.session_state.days_period = 30
-if 'start_date_custom' not in st.session_state:
-    st.session_state.start_date_custom = None
-if 'end_date_custom' not in st.session_state:
-    st.session_state.end_date_custom = None
-if 'period_type' not in st.session_state:
-    st.session_state.period_type = "Últimos dias"
 if 'use_mock' not in st.session_state:
     st.session_state.use_mock = False
 
@@ -71,9 +66,9 @@ def call_api(endpoint, params=None):
     if not st.session_state.api_headers or not st.session_state.api_base:
         return None
     urls = [
-        f"{st.session_state.api_base}/api/v1/{endpoint}",
-        f"{st.session_state.api_base}/v1/{endpoint}",
-        f"{st.session_state.api_base}/{endpoint}"
+        st.session_state.api_base + "/api/v1/" + endpoint,
+        st.session_state.api_base + "/v1/" + endpoint,
+        st.session_state.api_base + "/" + endpoint
     ]
     for url in urls:
         try:
@@ -86,7 +81,8 @@ def call_api(endpoint, params=None):
                     for key in ['data', 'items', 'results', endpoint]:
                         if key in data and isinstance(data[key], list):
                             return data[key]
-                    return [data] if data else []
+                    if data:
+                        return [data]
                 return []
         except:
             continue
@@ -105,11 +101,15 @@ def load_activities():
         ]
     result = []
     for item in data:
-        item_id = item.get('id') or item.get('activity_id')
-        item_name = item.get('name') or item.get('title')
+        item_id = item.get('id')
+        if not item_id:
+            item_id = item.get('activity_id')
+        item_name = item.get('name')
+        if not item_name:
+            item_name = item.get('title')
         if item_id and item_name:
             result.append({"id": item_id, "name": item_name})
-    return result if result else []
+    return result
 
 def load_teams(activity_id=None):
     params = {"limit": 200}
@@ -126,8 +126,12 @@ def load_teams(activity_id=None):
         ]
     result = []
     for item in data:
-        team_id = item.get('id') or item.get('team_id')
-        team_name = item.get('name') or item.get('team_name')
+        team_id = item.get('id')
+        if not team_id:
+            team_id = item.get('team_id')
+        team_name = item.get('name')
+        if not team_name:
+            team_name = item.get('team_name')
         if team_id and team_name:
             result.append({"id": team_id, "name": team_name})
     return result
@@ -141,7 +145,7 @@ def load_players(team_id=None, activity_id=None):
     data = call_api("players", params)
     if data is None or len(data) == 0:
         players_by_team = {
-            1: ["Agustin Dublo - #010", "Ignacio Diaz - #005", "Ignacio Fadul - #012", "Juan Martin Godoy - #009", "Juan Pedro Ramognino - #004", "Leonardo Gallardo - #000", "Mateo Cechi - #008", "Guido De Genaro - #*24"],
+            1: ["Agustin Dublo - #010", "Ignacio Diaz - #005", "Ignacio Fadul - #012", "Juan Martin Godoy - #009"],
             2: ["Carlos Martinez - #001", "Luis Rodriguez - #002", "Jose Fernandez - #003"],
             3: ["Miguel Gonzalez - #011", "Pablo Suarez - #013", "Diego Pérez - #014"],
             4: ["Marcos Kremer - #001", "Pablo Matera - #002", "Julián Montoya - #003"],
@@ -155,25 +159,29 @@ def load_players(team_id=None, activity_id=None):
         return [{"id": i, "name": name} for i, name in enumerate(all_players)]
     result = []
     for item in data:
-        player_id = item.get('id') or item.get('player_id')
-        player_name = item.get('name') or item.get('full_name') or item.get('display_name')
+        player_id = item.get('id')
+        if not player_id:
+            player_id = item.get('player_id')
+        player_name = item.get('name')
+        if not player_name:
+            player_name = item.get('full_name')
         if player_id and player_name:
-            number = item.get('number') or item.get('jersey_number')
+            number = item.get('number')
+            if not number:
+                number = item.get('jersey_number')
             if number:
-                player_name = f"{player_name} - #{number}"
+                player_name = player_name + " - #" + str(number)
             result.append({"id": player_id, "name": player_name})
     return result
 
-def load_events(team_id=None, player_id=None, activity_id=None, start_date=None, end_date=None, days=30):
-    params = {"limit": 1000}
-    if start_date and end_date:
-        params["start_date"] = start_date.strftime("%Y-%m-%d") if isinstance(start_date, datetime) else start_date
-        params["end_date"] = end_date.strftime("%Y-%m-%d") if isinstance(end_date, datetime) else end_date
-    else:
-        end = datetime.now()
-        start = end - timedelta(days=days)
-        params["start_date"] = start.strftime("%Y-%m-%d")
-        params["end_date"] = end.strftime("%Y-%m-%d")
+def load_events(team_id=None, player_id=None, activity_id=None, days=30):
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+    params = {
+        "limit": 1000,
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d")
+    }
     if team_id:
         params["team_id"] = team_id
     if player_id:
@@ -225,15 +233,12 @@ def load_events(team_id=None, player_id=None, activity_id=None, start_date=None,
         return df
     np.random.seed(42)
     n_events = np.random.randint(30, 80)
-    if days:
-        data_inicio = datetime.now() - timedelta(days=np.random.randint(1, days))
-    else:
-        data_inicio = datetime.now() - timedelta(days=30)
+    data_inicio = datetime.now() - timedelta(days=np.random.randint(1, days))
     start_times = []
     current_time = data_inicio
     for i in range(n_events):
         start_times.append(current_time.timestamp())
-        current_time += timedelta(seconds=np.random.randint(30, 300))
+        current_time = current_time + timedelta(seconds=np.random.randint(30, 300))
     eventos = {
         "tipo_evento": np.random.choice(["Contact", "Tackle", "Ruck", "Maul", "Scrum", "Lineout"], n_events),
         "duration_min": np.random.uniform(0.05, 0.35, n_events),
@@ -257,250 +262,163 @@ def load_events(team_id=None, player_id=None, activity_id=None, start_date=None,
     return df
 
 def create_rugby_field():
-    field_length = 100
-    field_width = 70
     fig = go.Figure()
-    fig.add_shape(type="rect", x0=0, x1=field_length, y0=0, y1=field_width, fillcolor="lightgreen", line=dict(color="black", width=2), layer="below")
-    fig.add_shape(type="line", x0=field_length/2, x1=field_length/2, y0=0, y1=field_width, line=dict(color="white", width=3))
-    fig.add_shape(type="line", x0=22, x1=22, y0=0, y1=field_width, line=dict(color="red", width=2, dash="dash"))
-    fig.add_shape(type="line", x0=field_length-22, x1=field_length-22, y0=0, y1=field_width, line=dict(color="red", width=2, dash="dash"))
-    fig.add_shape(type="line", x0=10, x1=10, y0=0, y1=field_width, line=dict(color="white", width=1, dash="dot"))
-    fig.add_shape(type="line", x0=field_length-10, x1=field_length-10, y0=0, y1=field_width, line=dict(color="white", width=1, dash="dot"))
-    fig.add_shape(type="rect", x0=0, x1=field_length, y0=0, y1=field_width, line=dict(color="white", width=3), fillcolor=None)
-    fig.add_shape(type="line", x0=field_length, x1=field_length, y0=field_width/2-5, y1=field_width/2+5, line=dict(color="yellow", width=3))
-    fig.add_shape(type="line", x0=0, x1=0, y0=field_width/2-5, y1=field_width/2+5, line=dict(color="yellow", width=3))
-    fig.update_layout(title="🏟️ Campo de Rugby - Dimensões Oficiais (100m x 70m)", xaxis=dict(title="Comprimento (metros)", range=[-5, field_length+5], showgrid=True, gridcolor="lightgray"), yaxis=dict(title="Largura (metros)", range=[-5, field_width+5], showgrid=True, gridcolor="lightgray"), plot_bgcolor="lightgreen", height=550, hovermode='closest')
-    annotations = [
-        dict(x=field_length/2, y=field_width + 3, text="🏉 Línea de Medio Campo (50m)", showarrow=False, font=dict(size=10, color="blue")),
-        dict(x=11, y=field_width + 3, text="Línea de 22m", showarrow=False, font=dict(size=9, color="red")),
-        dict(x=field_length-11, y=field_width + 3, text="Línea de 22m", showarrow=False, font=dict(size=9, color="red")),
-        dict(x=5, y=field_width/2, text="10m", showarrow=False, font=dict(size=8, color="darkblue")),
-        dict(x=field_length-5, y=field_width/2, text="10m", showarrow=False, font=dict(size=8, color="darkblue")),
-        dict(x=-3, y=field_width/2, text="🏉 In-Goal", showarrow=False, font=dict(size=9, color="darkgreen")),
-        dict(x=field_length+3, y=field_width/2, text="🏉 In-Goal", showarrow=False, font=dict(size=9, color="darkgreen"))
-    ]
-    fig.update_layout(annotations=annotations)
+    fig.add_shape(type="rect", x0=0, x1=100, y0=0, y1=70, fillcolor="lightgreen", line=dict(color="black", width=2), layer="below")
+    fig.add_shape(type="line", x0=50, x1=50, y0=0, y1=70, line=dict(color="white", width=3))
+    fig.add_shape(type="line", x0=22, x1=22, y0=0, y1=70, line=dict(color="red", width=2, dash="dash"))
+    fig.add_shape(type="line", x0=78, x1=78, y0=0, y1=70, line=dict(color="red", width=2, dash="dash"))
+    fig.add_shape(type="line", x0=10, x1=10, y0=0, y1=70, line=dict(color="white", width=1, dash="dot"))
+    fig.add_shape(type="line", x0=90, x1=90, y0=0, y1=70, line=dict(color="white", width=1, dash="dot"))
+    fig.update_layout(
+        title="Campo de Rugby (100m x 70m)",
+        xaxis=dict(title="Comprimento (m)", range=[-5, 105]),
+        yaxis=dict(title="Largura (m)", range=[-5, 75]),
+        plot_bgcolor="lightgreen",
+        height=550
+    )
     return fig
 
+# TELA DE LOGIN
 if not st.session_state.authenticated:
-    st.markdown('<div style="text-align: center; margin-top: 50px;"><h1 style="color: #1f3b73;">🏉 BIG Report - Rugby Analytics</h1><h3 style="color: #2c5aa0;">Catapult Sports Integration</h3><p style="margin-top: 20px;">Conecte-se à API da Catapult para acessar os dados</p></div>', unsafe_allow_html=True)
-    with st.container():
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("### 🔑 Autenticação")
-            api_token = st.text_area("Token JWT:", height=120, type="password", placeholder="Cole seu token JWT aqui...", help="Token fornecido pela Catapult Sports")
-            if api_token:
-                decoded = decode_jwt(api_token)
-                if decoded:
-                    api_url = decoded.get('iss', 'https://backend-us.openfield.catapultsports.com')
-                    st.success("✅ Token válido!")
-                    st.info(f"🌐 URL detectada: {api_url}")
-                    customer_id = None
-                    if 'com.catapultsports' in decoded:
-                        customer_id = decoded['com.catapultsports']['openfield']['customers'][0]['id']
-                        st.info(f"🏢 Customer ID: {customer_id}")
-                    if st.button("✅ Conectar à API", type="primary", use_container_width=True):
-                        st.session_state.api_headers = {"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"}
-                        st.session_state.api_base = api_url
-                        st.session_state.authenticated = True
-                        with st.spinner("Carregando atividades iniciais..."):
-                            acts = load_activities()
-                            if acts:
-                                st.session_state.activities_list = acts
-                                st.success(f"✅ {len(acts)} atividades carregadas!")
-                        st.rerun()
-                else:
-                    st.error("❌ Token inválido")
+    st.title("BIG Report - Catapult Sports")
+    token_input = st.text_area("Token JWT", height=100, type="password")
+    if token_input:
+        decoded = decode_jwt(token_input)
+        if decoded:
+            api_url = decoded.get('iss', 'https://backend-us.openfield.catapultsports.com')
+            st.success("Token valido")
+            st.write("URL: " + api_url)
+            if st.button("Conectar"):
+                st.session_state.api_headers = {"Authorization": "Bearer " + token_input, "Content-Type": "application/json"}
+                st.session_state.api_base = api_url
+                st.session_state.authenticated = True
+                with st.spinner("Carregando atividades..."):
+                    acts = load_activities()
+                    if acts:
+                        st.session_state.activities_list = acts
+                st.rerun()
+        else:
+            st.error("Token invalido")
+
+# DASHBOARD
 else:
-    st.markdown('<div class="main-header">🏉 BIG Report - Análisis de Retorno a la Actividad</div>', unsafe_allow_html=True)
-    st.markdown("---")
+    st.markdown('<div class="main-header">BIG Report - Analisis de Retorno a la Actividad</div>', unsafe_allow_html=True)
     if st.session_state.use_mock:
-        st.warning("⚠️ Modo de demonstração ativado - Usando dados simulados. A API não retornou dados reais.")
-    st.sidebar.markdown("## 📂 Filtros de Dados")
-    st.sidebar.success("✅ Conectado à API Catapult")
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📅 Período")
-    period_type = st.sidebar.radio("Tipo de período:", ["Últimos dias", "Intervalo personalizado"], horizontal=True)
-    st.session_state.period_type = period_type
-    if period_type == "Últimos dias":
-        days_period = st.sidebar.slider("Mostrar actividades de los últimos días:", 1, 180, 30, 7)
-        st.session_state.days_period = days_period
-        st.session_state.start_date_custom = None
-        st.session_state.end_date_custom = None
-        data_fim = datetime.now()
-        data_inicio = data_fim - timedelta(days=days_period)
-        st.sidebar.info(f"📆 Período: {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}")
-    else:
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            start_date = st.date_input("Data inicial:", datetime.now() - timedelta(days=30))
-            st.session_state.start_date_custom = start_date
-        with col2:
-            end_date = st.date_input("Data final:", datetime.now())
-            st.session_state.end_date_custom = end_date
-        if start_date and end_date:
-            days_period = (end_date - start_date).days
-            st.session_state.days_period = max(1, days_period)
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📋 Atividades")
-    if st.sidebar.button("🔄 Carregar Atividades", use_container_width=True):
-        with st.spinner("Carregando atividades da API..."):
-            acts = load_activities()
-            if acts:
-                st.session_state.activities_list = acts
-                st.sidebar.success(f"✅ {len(acts)} atividades carregadas")
+        st.warning("Modo de demonstracao ativado - Dados simulados")
+    # Sidebar
+    st.sidebar.header("Filtros")
+    st.sidebar.subheader("Atividades")
+    if st.sidebar.button("Carregar Atividades"):
+        with st.spinner("Carregando..."):
+            st.session_state.activities_list = load_activities()
+            st.sidebar.success(str(len(st.session_state.activities_list)) + " atividades")
     if st.session_state.activities_list:
-        activity_options = {None: "📋 Todas as Atividades"}
+        opts = {None: "Todas"}
         for a in st.session_state.activities_list:
-            activity_options[a['id']] = a['name']
-        selected_activity_id = st.sidebar.selectbox("Selecionar Atividade:", list(activity_options.keys()), format_func=lambda x: activity_options[x])
-        st.session_state.selected_activity_id = selected_activity_id
-        st.session_state.selected_activity_name = activity_options[selected_activity_id]
-        st.sidebar.success(f"📋 {st.session_state.selected_activity_name}")
-    else:
-        st.sidebar.warning("⚠️ Clique em 'Carregar Atividades' primeiro")
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🏆 Equipe")
-    if st.session_state.activities_list:
-        if st.sidebar.button("🔄 Carregar Equipes", use_container_width=True):
-            with st.spinner("Carregando equipes da API..."):
-                teams = load_teams(st.session_state.selected_activity_id)
-                if teams:
-                    st.session_state.teams_list = teams
-                    st.sidebar.success(f"✅ {len(teams)} equipes carregadas")
-        if st.session_state.teams_list:
-            team_options = {None: "🏆 Todas as Equipes"}
-            for t in st.session_state.teams_list:
-                team_options[t['id']] = t['name']
-            selected_team_id = st.sidebar.selectbox("Selecionar Equipe:", list(team_options.keys()), format_func=lambda x: team_options[x])
-            st.session_state.selected_team_id = selected_team_id
-            st.session_state.selected_team_name = team_options[selected_team_id]
-            st.sidebar.success(f"🏆 {st.session_state.selected_team_name}")
-        else:
-            st.sidebar.warning("⚠️ Clique em 'Carregar Equipes'")
-    else:
-        st.sidebar.warning("⚠️ Carregue as atividades primeiro")
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 👤 Atleta")
+            opts[a['id']] = a['name']
+        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
+        st.session_state.selected_activity_id = sel
+        st.session_state.selected_activity_name = opts[sel]
+    st.sidebar.subheader("Equipes")
+    if st.sidebar.button("Carregar Equipes"):
+        with st.spinner("Carregando..."):
+            st.session_state.teams_list = load_teams(st.session_state.selected_activity_id)
+            st.sidebar.success(str(len(st.session_state.teams_list)) + " equipes")
     if st.session_state.teams_list:
-        if st.sidebar.button("🔄 Carregar Atletas", use_container_width=True):
-            with st.spinner("Carregando atletas da API..."):
-                players = load_players(st.session_state.selected_team_id, st.session_state.selected_activity_id)
-                if players:
-                    st.session_state.players_list = players
-                    st.sidebar.success(f"✅ {len(players)} atletas carregados")
-        if st.session_state.players_list:
-            player_options = {None: "👥 Todos os Atletas"}
-            for p in st.session_state.players_list:
-                player_options[p['id']] = p['name']
-            selected_player_id = st.sidebar.selectbox("Selecionar Atleta:", list(player_options.keys()), format_func=lambda x: player_options[x])
-            st.session_state.selected_player_id = selected_player_id
-            st.session_state.selected_player_name = player_options[selected_player_id]
-            st.sidebar.success(f"👤 {st.session_state.selected_player_name}")
-        else:
-            st.sidebar.warning("⚠️ Clique em 'Carregar Atletas'")
-    else:
-        st.sidebar.warning("⚠️ Carregue as equipes primeiro")
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🎯 Tipo de Evento")
+        opts = {None: "Todas"}
+        for t in st.session_state.teams_list:
+            opts[t['id']] = t['name']
+        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
+        st.session_state.selected_team_id = sel
+        st.session_state.selected_team_name = opts[sel]
+    st.sidebar.subheader("Atletas")
+    if st.sidebar.button("Carregar Atletas"):
+        with st.spinner("Carregando..."):
+            st.session_state.players_list = load_players(st.session_state.selected_team_id, st.session_state.selected_activity_id)
+            st.sidebar.success(str(len(st.session_state.players_list)) + " atletas")
+    if st.session_state.players_list:
+        opts = {None: "Todos"}
+        for p in st.session_state.players_list:
+            opts[p['id']] = p['name']
+        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
+        st.session_state.selected_player_id = sel
+        st.session_state.selected_player_name = opts[sel]
+    st.sidebar.subheader("Periodo")
+    days = st.sidebar.slider("Ultimos dias", 1, 180, 30)
+    st.session_state.days_period = days
+    st.sidebar.subheader("Tipo de Evento")
     event_types = ["Todos", "Contact", "Tackle", "Ruck", "Maul", "Scrum", "Lineout"]
-    st.session_state.selected_event_type = st.sidebar.selectbox("Filtrar por evento:", event_types)
+    selected_event_type = st.sidebar.selectbox("Filtrar", event_types)
     st.sidebar.markdown("---")
-    col_btn1, col_btn2 = st.sidebar.columns(2)
-    with col_btn1:
-        if st.button("🔄 Resetar Filtros", use_container_width=True):
-            st.session_state.selected_activity_id = None
-            st.session_state.selected_team_id = None
-            st.session_state.selected_player_id = None
-            st.session_state.selected_event_type = "Todos"
-            st.session_state.events_df = None
-            st.rerun()
-    with col_btn2:
-        if st.button("🔓 Desconectar", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
-    st.sidebar.markdown("---")
-    if st.sidebar.button("📊 CARREGAR EVENTOS", type="primary", use_container_width=True):
-        with st.spinner("Carregando eventos da API..."):
-            if st.session_state.period_type == "Intervalo personalizado" and st.session_state.start_date_custom and st.session_state.end_date_custom:
-                df = load_events(
-                    team_id=st.session_state.selected_team_id,
-                    player_id=st.session_state.selected_player_id,
-                    activity_id=st.session_state.selected_activity_id,
-                    start_date=st.session_state.start_date_custom,
-                    end_date=st.session_state.end_date_custom
-                )
-            else:
-                df = load_events(
-                    team_id=st.session_state.selected_team_id,
-                    player_id=st.session_state.selected_player_id,
-                    activity_id=st.session_state.selected_activity_id,
-                    days=st.session_state.days_period
-                )
+    if st.sidebar.button("CARREGAR EVENTOS", type="primary"):
+        with st.spinner("Carregando eventos..."):
+            df = load_events(
+                team_id=st.session_state.selected_team_id,
+                player_id=st.session_state.selected_player_id,
+                activity_id=st.session_state.selected_activity_id,
+                days=days
+            )
             st.session_state.events_df = df
-            if not df.empty:
-                st.sidebar.success(f"✅ {len(df)} eventos carregados")
-            else:
-                st.sidebar.warning("⚠️ Nenhum evento encontrado")
+            st.sidebar.success(str(len(df)) + " eventos")
+    if st.sidebar.button("Resetar"):
+        st.session_state.selected_activity_id = None
+        st.session_state.selected_team_id = None
+        st.session_state.selected_player_id = None
+        st.session_state.events_df = None
+        st.rerun()
+    if st.sidebar.button("Desconectar"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 Resumo dos Filtros")
-    st.sidebar.markdown(f"**Atividade:** {st.session_state.selected_activity_name}")
-    st.sidebar.markdown(f"**Equipe:** {st.session_state.selected_team_name}")
-    st.sidebar.markdown(f"**Atleta:** {st.session_state.selected_player_name}")
-    st.sidebar.markdown(f"**Período:** {st.session_state.days_period} dias")
+    st.sidebar.write("**Atividade:** " + st.session_state.selected_activity_name)
+    st.sidebar.write("**Equipe:** " + st.session_state.selected_team_name)
+    st.sidebar.write("**Atleta:** " + st.session_state.selected_player_name)
+    # Dashboard
     if st.session_state.events_df is not None and not st.session_state.events_df.empty:
         df = st.session_state.events_df.copy()
-        if st.session_state.selected_event_type != "Todos" and 'tipo_evento' in df.columns:
-            df = df[df['tipo_evento'] == st.session_state.selected_event_type]
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Total Eventos BIG", len(df))
-        col2.metric("Tempo Médio Entre Eventos (min)", f"{df['back_in_game_min'].mean():.2f}")
-        col3.metric("Duração Média por Evento (min)", f"{df['duration_min'].mean():.2f}")
-        col4.metric("Carga Total (min)", f"{df['duration_min'].sum():.2f}")
-        col5.metric("Confiança Média", f"{df['confidence'].mean():.3f}")
-        st.markdown('<div class="sub-header">🏟️ Mapa de Calor - Atividade no Campo</div>', unsafe_allow_html=True)
-        fig_campo = create_rugby_field()
-        if 'pos_x' in df.columns and 'pos_y' in df.columns:
-            fig_campo.add_trace(go.Scatter(
-                x=df['pos_x'], y=df['pos_y'], mode='markers',
-                marker=dict(size=df['duration_min'] * 30, color=df['confidence'], colorscale='Viridis', showscale=True, colorbar=dict(title="Confiança"), opacity=0.7, line=dict(width=1, color='black')),
-                text=[f"Evento: {row.get('tipo_evento', 'N/A')}<br>Duração: {row.get('duration_min', 0):.2f}min<br>Conf: {row.get('confidence', 0):.3f}" for _, row in df.iterrows()],
-                hoverinfo='text', name='Eventos'
-            ))
-        st.plotly_chart(fig_campo, use_container_width=True)
-        st.markdown('<div class="sub-header">📋 Detalle de Eventos</div>', unsafe_allow_html=True)
-        df_display = df.copy()
-        display_cols = ['tipo_evento', 'duration_min', 'back_in_game_min', 'confidence']
-        if 'equipe' in df_display.columns and st.session_state.selected_team_id is None:
-            display_cols.insert(1, 'equipe')
-        if 'atleta' in df_display.columns and st.session_state.selected_player_id is None:
-            display_cols.insert(2, 'atleta')
-        st.dataframe(df_display[display_cols].head(100), use_container_width=True)
-        st.markdown('<div class="sub-header">📈 Análise de Eventos</div>', unsafe_allow_html=True)
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            event_counts = df['tipo_evento'].value_counts()
-            fig_pie = px.pie(values=event_counts.values, names=event_counts.index, title="Distribución por Tipo de Evento", color_discrete_sequence=px.colors.qualitative.Set3)
+        if selected_event_type != "Todos" and 'tipo_evento' in df.columns:
+            df = df[df['tipo_evento'] == selected_event_type]
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Total Eventos", len(df))
+        c2.metric("Duracao Media", f"{df['duration_min'].mean():.2f} min")
+        c3.metric("Carga Total", f"{df['duration_min'].sum():.2f} min")
+        c4.metric("Confianca Media", f"{df['confidence'].mean():.3f}")
+        c5.metric("Intervalo Medio", f"{df['back_in_game_min'].mean():.2f} min")
+        st.subheader("Mapa de Atividade")
+        fig = create_rugby_field()
+        fig.add_trace(go.Scatter(
+            x=df['pos_x'], y=df['pos_y'], mode='markers',
+            marker=dict(size=df['duration_min']*30, color=df['confidence'], colorscale='Viridis', showscale=True, opacity=0.7),
+            text=[f"Tipo: {row['tipo_evento']}<br>Duracao: {row['duration_min']:.2f}min" for _, row in df.iterrows()],
+            hoverinfo='text'
+        ))
+        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Eventos")
+        cols = ['tipo_evento', 'duration_min', 'back_in_game_min', 'confidence']
+        if 'equipe' in df.columns:
+            cols.insert(1, 'equipe')
+        if 'atleta' in df.columns:
+            cols.insert(2, 'atleta')
+        st.dataframe(df[cols].head(100), use_container_width=True)
+        st.subheader("Analise")
+        col1, col2 = st.columns(2)
+        with col1:
+            counts = df['tipo_evento'].value_counts()
+            fig_pie = px.pie(values=counts.values, names=counts.index, title="Distribuicao")
             st.plotly_chart(fig_pie, use_container_width=True)
-        with col_g2:
-            fig_duration = px.bar(x=range(min(len(df), 50)), y=df['duration_min'].head(50), title="Duración por Evento (minutos)", labels={"x": "Número de Evento", "y": "Duración (min)"})
-            fig_duration.update_traces(marker_color='steelblue')
-            st.plotly_chart(fig_duration, use_container_width=True)
-        col_g3, col_g4 = st.columns(2)
-        with col_g3:
-            fig_timeline = px.line(x=range(len(df)), y=df['back_in_game_min'], title="Tiempo entre Eventos - Back in Game (minutos)", labels={"x": "Secuencia de Eventos", "y": "Tiempo (min)"})
-            fig_timeline.update_traces(line=dict(color='orange', width=2))
-            st.plotly_chart(fig_timeline, use_container_width=True)
-        with col_g4:
-            fig_conf = px.scatter(x=range(len(df)), y=df['confidence'], title="Confianza por Evento", labels={"x": "Evento", "y": "Confianza"}, color=df['confidence'], color_continuous_scale='RdYlGn')
-            st.plotly_chart(fig_conf, use_container_width=True)
+        with col2:
+            fig_bar = px.bar(x=range(min(50, len(df))), y=df['duration_min'].head(50), title="Duracao")
+            st.plotly_chart(fig_bar, use_container_width=True)
+        col3, col4 = st.columns(2)
+        with col3:
+            fig_line = px.line(x=range(len(df)), y=df['back_in_game_min'], title="Tempo entre Eventos")
+            st.plotly_chart(fig_line, use_container_width=True)
+        with col4:
+            fig_scatter = px.scatter(x=range(len(df)), y=df['confidence'], title="Confianca", color=df['confidence'])
+            st.plotly_chart(fig_scatter, use_container_width=True)
     elif st.session_state.events_df is not None:
-        st.warning("⚠️ Nenhum evento encontrado para os filtros selecionados")
-        st.info("💡 Tente: Selecionar um período maior, escolher uma equipe diferente, ou verificar se há eventos disponíveis")
+        st.warning("Nenhum evento encontrado")
     else:
-        st.info("👈 Selecione os filtros na barra lateral e clique em CARREGAR EVENTOS")
-    st.markdown("---")
-    st.caption("📡 BIG Report - Análise de Retorno à Actividad | Datos: Catapult Sports")
-    if st.session_state.use_mock:
-        st.caption("🎮 Modo de demostración - Datos simulados para visualización")
+        st.info("Selecione os filtros e clique em CARREGAR EVENTOS")
+    st.caption("BIG Report - Catapult Sports")
