@@ -54,7 +54,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==================== FUNÇÕES DE AUTENTICAÇÃO ====================
+# ==================== INICIALIZAÇÃO ====================
 
 def init_session_state():
     """Inicializa o estado da sessão"""
@@ -63,17 +63,33 @@ def init_session_state():
     if 'api_token' not in st.session_state:
         st.session_state.api_token = None
     if 'api_url' not in st.session_state:
-        st.session_state.api_url = None
+        st.session_state.api_url = "https://backend-us.openfield.catapultsports.com"
     if 'api_headers' not in st.session_state:
         st.session_state.api_headers = None
     
-    # Dados carregados em cascata
-    if 'activities_data' not in st.session_state:
-        st.session_state.activities_data = None
-    if 'teams_data' not in st.session_state:
-        st.session_state.teams_data = None
-    if 'players_data' not in st.session_state:
-        st.session_state.players_data = None
+    # Dados com nomes e IDs
+    if 'activities_list' not in st.session_state:
+        st.session_state.activities_list = []  # Lista de dicts {id, name}
+    if 'teams_list' not in st.session_state:
+        st.session_state.teams_list = []      # Lista de dicts {id, name}
+    if 'players_list' not in st.session_state:
+        st.session_state.players_list = []    # Lista de dicts {id, name, number}
+    
+    # Seleções atuais (guardando IDs)
+    if 'selected_activity_id' not in st.session_state:
+        st.session_state.selected_activity_id = None
+    if 'selected_activity_name' not in st.session_state:
+        st.session_state.selected_activity_name = "Todas"
+    if 'selected_team_id' not in st.session_state:
+        st.session_state.selected_team_id = None
+    if 'selected_team_name' not in st.session_state:
+        st.session_state.selected_team_name = "Todas"
+    if 'selected_player_id' not in st.session_state:
+        st.session_state.selected_player_id = None
+    if 'selected_player_name' not in st.session_state:
+        st.session_state.selected_player_name = "Todos"
+    
+    # Dados de eventos
     if 'events_data' not in st.session_state:
         st.session_state.events_data = None
     
@@ -87,17 +103,19 @@ def init_session_state():
     if 'loading_events' not in st.session_state:
         st.session_state.loading_events = False
 
+# ==================== FUNÇÕES DA API ====================
+
 def test_api_connection(token, base_url):
-    """Testa a conexão com a API da Catapult"""
+    """Testa a conexão com a API"""
     try:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
         
-        # Testar com endpoint de atividades
+        # Testar com endpoint correto
         response = requests.get(
-            f"{base_url}/activities",
+            f"{base_url}/api/v1/activities",
             headers=headers,
             timeout=10,
             params={"limit": 1}
@@ -108,251 +126,315 @@ def test_api_connection(token, base_url):
         elif response.status_code == 401:
             return False, "Token inválido ou expirado"
         elif response.status_code == 403:
-            return False, "Token sem permissão para acessar atividades"
+            return False, "Token sem permissão"
         else:
-            return False, f"Erro {response.status_code}: {response.text[:100]}"
+            # Tentar sem o /api/v1
+            response2 = requests.get(
+                f"{base_url}/activities",
+                headers=headers,
+                timeout=10,
+                params={"limit": 1}
+            )
+            if response2.status_code == 200:
+                return True, "Conexão realizada (endpoint alternativo)"
+            else:
+                return False, f"Erro {response.status_code}: Não foi possível conectar"
             
-    except requests.exceptions.Timeout:
-        return False, "Timeout - Servidor não respondeu"
-    except requests.exceptions.ConnectionError:
-        return False, "Erro de conexão - Verifique a URL"
     except Exception as e:
-        return False, f"Erro inesperado: {str(e)}"
-
-# ==================== FUNÇÕES DE CARREGAMENTO EM CASCATA ====================
+        return False, f"Erro de conexão: {str(e)}"
 
 def load_activities_from_api():
-    """Carrega atividades disponíveis da API (NÍVEL 1)"""
+    """Carrega atividades e retorna lista com {id, name}"""
     if not st.session_state.api_headers:
-        return None
+        return []
     
     try:
-        response = requests.get(
-            f"{st.session_state.api_url}/activities",
-            headers=st.session_state.api_headers,
-            timeout=15,
-            params={"limit": 100}
-        )
+        # Tentar diferentes endpoints
+        endpoints_to_try = [
+            f"{st.session_state.api_url}/api/v1/activities",
+            f"{st.session_state.api_url}/v1/activities",
+            f"{st.session_state.api_url}/activities"
+        ]
         
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Parse da resposta (ajustar conforme estrutura real)
-            if isinstance(data, list):
-                activities = data
-            elif isinstance(data, dict) and 'activities' in data:
-                activities = data['activities']
-            elif isinstance(data, dict) and 'data' in data:
-                activities = data['data']
-            else:
-                activities = []
-            
-            # Extrair nomes das atividades
-            activity_names = []
-            for act in activities:
-                name = act.get('name') or act.get('title') or act.get('id')
-                if name:
-                    activity_names.append(name)
-            
-            return activity_names
-        else:
-            st.error(f"Erro ao carregar atividades: {response.status_code}")
-            return None
+        for endpoint in endpoints_to_try:
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=st.session_state.api_headers,
+                    timeout=15,
+                    params={"limit": 200}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Extrair lista de atividades com nome e ID
+                    activities = []
+                    
+                    if isinstance(data, list):
+                        for item in data:
+                            act_id = item.get('id') or item.get('activity_id')
+                            act_name = item.get('name') or item.get('title') or item.get('description')
+                            if act_id and act_name:
+                                activities.append({"id": act_id, "name": act_name})
+                    
+                    elif isinstance(data, dict):
+                        # Tentar encontrar a lista em campos comuns
+                        for key in ['data', 'items', 'results', 'activities']:
+                            if key in data and isinstance(data[key], list):
+                                for item in data[key]:
+                                    act_id = item.get('id') or item.get('activity_id')
+                                    act_name = item.get('name') or item.get('title')
+                                    if act_id and act_name:
+                                        activities.append({"id": act_id, "name": act_name})
+                                break
+                    
+                    if activities:
+                        return activities
+            except:
+                continue
+        
+        return []
             
     except Exception as e:
-        st.error(f"Erro na requisição de atividades: {str(e)}")
-        return None
+        st.error(f"Erro ao carregar atividades: {str(e)}")
+        return []
 
-def load_teams_from_api(activity_name=None):
-    """Carrega equipes da API baseado na atividade selecionada (NÍVEL 2)"""
+def load_teams_from_api(activity_id=None):
+    """Carrega equipes e retorna lista com {id, name}"""
     if not st.session_state.api_headers:
-        return None
+        return []
     
     try:
-        params = {}
-        if activity_name and activity_name != "Todas Atividades":
-            params["activity"] = activity_name
+        endpoints_to_try = [
+            f"{st.session_state.api_url}/api/v1/teams",
+            f"{st.session_state.api_url}/v1/teams",
+            f"{st.session_state.api_url}/teams"
+        ]
         
-        response = requests.get(
-            f"{st.session_state.api_url}/teams",
-            headers=st.session_state.api_headers,
-            timeout=15,
-            params=params
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if isinstance(data, list):
-                teams = data
-            elif isinstance(data, dict) and 'teams' in data:
-                teams = data['teams']
-            elif isinstance(data, dict) and 'data' in data:
-                teams = data['data']
-            else:
-                teams = []
-            
-            # Extrair nomes das equipes
-            team_names = []
-            for team in teams:
-                name = team.get('name') or team.get('team_name') or team.get('id')
-                if name:
-                    team_names.append(name)
-            
-            return team_names if team_names else ["Nenhuma equipe encontrada"]
-        else:
-            st.warning(f"Não foi possível carregar equipes: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        st.warning(f"Erro ao carregar equipes: {str(e)}")
-        return None
-
-def load_players_from_api(team_name=None, activity_name=None):
-    """Carrega atletas da API baseado na equipe selecionada (NÍVEL 3)"""
-    if not st.session_state.api_headers:
-        return None
-    
-    try:
         params = {"limit": 200}
-        if team_name and team_name != "Todas Equipes":
-            params["team"] = team_name
-        if activity_name and activity_name != "Todas Atividades":
-            params["activity"] = activity_name
+        if activity_id:
+            params["activity_id"] = activity_id
         
-        response = requests.get(
-            f"{st.session_state.api_url}/players",
-            headers=st.session_state.api_headers,
-            timeout=15,
-            params=params
-        )
+        for endpoint in endpoints_to_try:
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=st.session_state.api_headers,
+                    timeout=15,
+                    params=params
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    teams = []
+                    
+                    if isinstance(data, list):
+                        for item in data:
+                            team_id = item.get('id') or item.get('team_id')
+                            team_name = item.get('name') or item.get('team_name')
+                            if team_id and team_name:
+                                teams.append({"id": team_id, "name": team_name})
+                    
+                    elif isinstance(data, dict):
+                        for key in ['data', 'items', 'results', 'teams']:
+                            if key in data and isinstance(data[key], list):
+                                for item in data[key]:
+                                    team_id = item.get('id') or item.get('team_id')
+                                    team_name = item.get('name') or item.get('team_name')
+                                    if team_id and team_name:
+                                        teams.append({"id": team_id, "name": team_name})
+                                break
+                    
+                    if teams:
+                        return teams
+            except:
+                continue
         
-        if response.status_code == 200:
-            data = response.json()
-            
-            if isinstance(data, list):
-                players = data
-            elif isinstance(data, dict) and 'players' in data:
-                players = data['players']
-            elif isinstance(data, dict) and 'data' in data:
-                players = data['data']
-            else:
-                players = []
-            
-            # Extrair nomes dos atletas
-            player_names = []
-            for player in players:
-                name = player.get('name') or player.get('full_name') or player.get('first_name')
-                if name:
-                    # Adicionar número se disponível
-                    number = player.get('number') or player.get('jersey_number')
-                    if number:
-                        name = f"{name} - #{number}"
-                    player_names.append(name)
-            
-            return player_names if player_names else ["Nenhum atleta encontrado"]
-        else:
-            st.warning(f"Não foi possível carregar atletas: {response.status_code}")
-            return None
+        return []
             
     except Exception as e:
-        st.warning(f"Erro ao carregar atletas: {str(e)}")
-        return None
+        st.error(f"Erro ao carregar equipes: {str(e)}")
+        return []
 
-def load_events_from_api(team_name=None, player_name=None, activity_name=None, start_date=None, end_date=None):
-    """Carrega eventos da API com todos os filtros (NÍVEL 4)"""
+def load_players_from_api(team_id=None, activity_id=None):
+    """Carrega atletas e retorna lista com {id, name, number}"""
+    if not st.session_state.api_headers:
+        return []
+    
+    try:
+        endpoints_to_try = [
+            f"{st.session_state.api_url}/api/v1/players",
+            f"{st.session_state.api_url}/v1/players",
+            f"{st.session_state.api_url}/players"
+        ]
+        
+        params = {"limit": 500}
+        if team_id:
+            params["team_id"] = team_id
+        if activity_id:
+            params["activity_id"] = activity_id
+        
+        for endpoint in endpoints_to_try:
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=st.session_state.api_headers,
+                    timeout=15,
+                    params=params
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    players = []
+                    
+                    if isinstance(data, list):
+                        for item in data:
+                            player_id = item.get('id') or item.get('player_id')
+                            player_name = item.get('name') or item.get('full_name') or item.get('first_name')
+                            if player_id and player_name:
+                                # Adicionar número se disponível
+                                number = item.get('number') or item.get('jersey_number')
+                                if number:
+                                    player_name = f"{player_name} (#{number})"
+                                players.append({"id": player_id, "name": player_name})
+                    
+                    elif isinstance(data, dict):
+                        for key in ['data', 'items', 'results', 'players']:
+                            if key in data and isinstance(data[key], list):
+                                for item in data[key]:
+                                    player_id = item.get('id') or item.get('player_id')
+                                    player_name = item.get('name') or item.get('full_name')
+                                    if player_id and player_name:
+                                        number = item.get('number') or item.get('jersey_number')
+                                        if number:
+                                            player_name = f"{player_name} (#{number})"
+                                        players.append({"id": player_id, "name": player_name})
+                                break
+                    
+                    if players:
+                        return players
+            except:
+                continue
+        
+        return []
+            
+    except Exception as e:
+        st.error(f"Erro ao carregar atletas: {str(e)}")
+        return []
+
+def load_events_from_api(team_id=None, player_id=None, activity_id=None, start_date=None, end_date=None):
+    """Carrega eventos da API com todos os filtros"""
     if not st.session_state.api_headers:
         return pd.DataFrame()
     
     try:
+        endpoints_to_try = [
+            f"{st.session_state.api_url}/api/v1/events",
+            f"{st.session_state.api_url}/v1/events",
+            f"{st.session_state.api_url}/events"
+        ]
+        
         params = {"limit": 1000}
         
-        if team_name and team_name != "Todas Equipes":
-            params["team"] = team_name
-        if player_name and player_name != "Todos Atletas":
-            params["player"] = player_name
-        if activity_name and activity_name != "Todas Atividades":
-            params["activity"] = activity_name
+        if team_id:
+            params["team_id"] = team_id
+        if player_id:
+            params["player_id"] = player_id
+        if activity_id:
+            params["activity_id"] = activity_id
         if start_date:
-            params["start_date"] = start_date.isoformat()
+            params["start_date"] = start_date.isoformat() if isinstance(start_date, datetime) else start_date
         if end_date:
-            params["end_date"] = end_date.isoformat()
+            params["end_date"] = end_date.isoformat() if isinstance(end_date, datetime) else end_date
         
-        response = requests.get(
-            f"{st.session_state.api_url}/events",
-            headers=st.session_state.api_headers,
-            timeout=20,
-            params=params
-        )
+        for endpoint in endpoints_to_try:
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=st.session_state.api_headers,
+                    timeout=20,
+                    params=params
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    events = []
+                    
+                    if isinstance(data, list):
+                        events = data
+                    elif isinstance(data, dict):
+                        for key in ['data', 'items', 'results', 'events']:
+                            if key in data and isinstance(data[key], list):
+                                events = data[key]
+                                break
+                    
+                    if events:
+                        df = pd.DataFrame(events)
+                        
+                        # Mapear campos para nomes amigáveis
+                        column_mapping = {
+                            'type': 'tipo_evento',
+                            'event_type': 'tipo_evento',
+                            'duration': 'duration_min',
+                            'duration_minutes': 'duration_min',
+                            'confidence_score': 'confidence',
+                            'confidence': 'confidence',
+                            'position_x': 'pos_x',
+                            'x': 'pos_x',
+                            'position_y': 'pos_y',
+                            'y': 'pos_y',
+                            'player_name': 'atleta',
+                            'team_name': 'equipe',
+                            'activity_name': 'atividade'
+                        }
+                        
+                        for old, new in column_mapping.items():
+                            if old in df.columns and new not in df.columns:
+                                df[new] = df[old]
+                        
+                        # Adicionar nomes amigáveis se disponíveis
+                        if 'atleta' not in df.columns and player_id:
+                            # Buscar nome do atleta selecionado
+                            for player in st.session_state.players_list:
+                                if player['id'] == player_id:
+                                    df['atleta'] = player['name']
+                                    break
+                        
+                        if 'equipe' not in df.columns and team_id:
+                            for team in st.session_state.teams_list:
+                                if team['id'] == team_id:
+                                    df['equipe'] = team['name']
+                                    break
+                        
+                        if 'atividade' not in df.columns and activity_id:
+                            for activity in st.session_state.activities_list:
+                                if activity['id'] == activity_id:
+                                    df['atividade'] = activity['name']
+                                    break
+                        
+                        return df
+            except:
+                continue
         
-        if response.status_code == 200:
-            data = response.json()
-            
-            if isinstance(data, list):
-                events = data
-            elif isinstance(data, dict) and 'events' in data:
-                events = data['events']
-            elif isinstance(data, dict) and 'data' in data:
-                events = data['data']
-            else:
-                events = []
-            
-            if events:
-                df = pd.DataFrame(events)
-                
-                # Mapear campos para o formato esperado pelo dashboard
-                column_mapping = {
-                    'type': 'tipo_evento',
-                    'event_type': 'tipo_evento',
-                    'duration': 'duration_min',
-                    'duration_minutes': 'duration_min',
-                    'confidence_score': 'confidence',
-                    'confidence': 'confidence',
-                    'position_x': 'pos_x',
-                    'x': 'pos_x',
-                    'position_y': 'pos_y',
-                    'y': 'pos_y'
-                }
-                
-                for old, new in column_mapping.items():
-                    if old in df.columns and new not in df.columns:
-                        df[new] = df[old]
-                
-                # Garantir colunas necessárias
-                if 'duration_min' not in df.columns:
-                    df['duration_min'] = 0.1
-                if 'confidence' not in df.columns:
-                    df['confidence'] = 0.95
-                if 'pos_x' not in df.columns:
-                    df['pos_x'] = 50
-                if 'pos_y' not in df.columns:
-                    df['pos_y'] = 35
-                if 'tipo_evento' not in df.columns:
-                    df['tipo_evento'] = 'Evento'
-                
-                return df
-            else:
-                st.info("Nenhum evento encontrado para os filtros selecionados")
-                return pd.DataFrame()
-        else:
-            st.error(f"Erro ao carregar eventos: {response.status_code}")
-            return pd.DataFrame()
+        return pd.DataFrame()
             
     except Exception as e:
-        st.error(f"Erro na requisição de eventos: {str(e)}")
+        st.error(f"Erro ao carregar eventos: {str(e)}")
         return pd.DataFrame()
 
 # ==================== FUNÇÃO DO CAMPO DE RUGBY ====================
 
 def create_rugby_field():
-    """Cria um campo de rugby com dimensões oficiais"""
-    
+    """Cria um campo de rugby"""
     field_length = 100
     field_width = 70
     
     fig = go.Figure()
     
-    # Área de jogo
     fig.add_shape(type="rect",
                   x0=0, x1=field_length,
                   y0=0, y1=field_width,
@@ -360,13 +442,11 @@ def create_rugby_field():
                   line=dict(color="black", width=2),
                   layer="below")
     
-    # Linha de meio-campo
     fig.add_shape(type="line",
                   x0=field_length/2, x1=field_length/2,
                   y0=0, y1=field_width,
                   line=dict(color="white", width=3))
     
-    # Linhas de 22m
     fig.add_shape(type="line",
                   x0=22, x1=22,
                   y0=0, y1=field_width,
@@ -377,10 +457,20 @@ def create_rugby_field():
                   y0=0, y1=field_width,
                   line=dict(color="red", width=2, dash="dash"))
     
+    fig.add_shape(type="line",
+                  x0=10, x1=10,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=1, dash="dot"))
+    
+    fig.add_shape(type="line",
+                  x0=field_length-10, x1=field_length-10,
+                  y0=0, y1=field_width,
+                  line=dict(color="white", width=1, dash="dot"))
+    
     fig.update_layout(
         title="🏟️ Campo de Rugby - Dimensões Oficiais (100m x 70m)",
-        xaxis=dict(title="Comprimento (metros)", range=[-5, field_length+5]),
-        yaxis=dict(title="Largura (metros)", range=[-5, field_width+5]),
+        xaxis=dict(title="Comprimento (metros)", range=[-5, field_length+5], showgrid=True),
+        yaxis=dict(title="Largura (metros)", range=[-5, field_width+5], showgrid=True),
         plot_bgcolor="lightgreen",
         height=550,
         hovermode='closest'
@@ -391,12 +481,13 @@ def create_rugby_field():
 # ==================== TELA DE LOGIN ====================
 
 def login_screen():
-    """Tela de login para inserção do token da API"""
+    """Tela de login"""
     
     st.markdown("""
         <div style="text-align: center; margin-top: 50px;">
             <h1 style="color: #1f3b73;">🏉 BIG Report - Rugby Analytics</h1>
-            <h3 style="color: #2c5aa0;">Catapult Sports Integration</h3>
+            <h3 style="color: #2c5aa0;">Catapult OpenField Integration</h3>
+            <p style="margin-top: 20px;">Conecte-se à API para acessar dados reais de atletas e atividades</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -404,11 +495,11 @@ def login_screen():
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
-            st.markdown("### 🔑 Autenticação API Catapult")
+            st.markdown("### 🔑 Autenticação")
             
             api_token = st.text_area(
                 "Token JWT:",
-                height=150,
+                height=100,
                 placeholder="Cole seu token JWT aqui...",
                 help="Token fornecido pela Catapult Sports"
             )
@@ -419,41 +510,57 @@ def login_screen():
                 help="URL base da API Catapult"
             )
             
-            if st.button("✅ Conectar à API", type="primary", use_container_width=True):
-                if api_token:
-                    with st.spinner("Conectando à API Catapult..."):
-                        success, message = test_api_connection(api_token, api_url)
-                        
-                        if success:
-                            st.session_state.api_token = api_token
-                            st.session_state.api_url = api_url
-                            st.session_state.api_headers = {
-                                "Authorization": f"Bearer {api_token}",
-                                "Content-Type": "application/json"
-                            }
-                            st.session_state.authenticated = True
-                            st.success(message)
-                            st.rerun()
-                        else:
-                            st.error(message)
-                else:
-                    st.warning("Por favor, insira o token da API")
+            st.markdown("---")
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("✅ Conectar à API", type="primary", use_container_width=True):
+                    if api_token:
+                        with st.spinner("Conectando à API Catapult..."):
+                            success, message = test_api_connection(api_token, api_url)
+                            
+                            if success:
+                                st.session_state.api_token = api_token
+                                st.session_state.api_url = api_url
+                                st.session_state.api_headers = {
+                                    "Authorization": f"Bearer {api_token}",
+                                    "Content-Type": "application/json"
+                                }
+                                st.session_state.authenticated = True
+                                st.success(message)
+                                st.rerun()
+                            else:
+                                st.error(message)
+                    else:
+                        st.warning("Por favor, insira o token da API")
+            
+            with col_btn2:
+                if st.button("ℹ️ Informações", use_container_width=True):
+                    st.info("""
+                    **Como obter o token:**
+                    1. Acesse o portal da Catapult
+                    2. Vá em Configurações > API
+                    3. Crie ou copie um token JWT
+                    
+                    **URL padrão:** 
+                    https://backend-us.openfield.catapultsports.com
+                    """)
 
 # ==================== DASHBOARD PRINCIPAL ====================
 
 def main_dashboard():
-    """Dashboard principal com carregamento em cascata"""
+    """Dashboard principal com nomes amigáveis"""
     
     st.markdown('<div class="main-header">🏉 BIG Report - Análisis de Retorno a la Actividad</div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    # Sidebar com carregamento em cascata
-    st.sidebar.markdown("## 📂 Dados em Cascata")
-    st.sidebar.info("Os dados são carregados em etapas:")
-    st.sidebar.markdown("1️⃣ Atividades → 2️⃣ Equipes → 3️⃣ Atletas → 4️⃣ Eventos")
+    # Sidebar com filtros em cascata
+    st.sidebar.markdown("## 📂 Filtros de Dados")
+    st.sidebar.info("📡 Dados reais da API Catapult")
     st.sidebar.markdown("---")
     
-    # ========== NÍVEL 1: CARREGAR ATIVIDADES ==========
+    # ========== NÍVEL 1: ATIVIDADES ==========
     st.sidebar.markdown("### 1️⃣ Atividades")
     
     if st.sidebar.button("🔄 Carregar Atividades", use_container_width=True):
@@ -461,92 +568,136 @@ def main_dashboard():
         with st.spinner("Carregando atividades da API..."):
             activities = load_activities_from_api()
             if activities:
-                st.session_state.activities_data = activities
+                st.session_state.activities_list = activities
                 st.sidebar.success(f"✅ {len(activities)} atividades carregadas")
+                # Mostrar alguns nomes como exemplo
+                with st.sidebar.expander("📋 Ver atividades carregadas"):
+                    for act in activities[:10]:
+                        st.write(f"• {act['name']}")
+                    if len(activities) > 10:
+                        st.write(f"... e mais {len(activities)-10} atividades")
             else:
-                st.sidebar.error("❌ Falha ao carregar atividades")
+                st.sidebar.error("❌ Nenhuma atividade encontrada")
         st.session_state.loading_activities = False
         st.rerun()
     
-    if st.session_state.activities_data:
-        selected_activity = st.sidebar.selectbox(
+    if st.session_state.activities_list:
+        # Criar opções com nomes amigáveis
+        activity_options = {act['id']: act['name'] for act in st.session_state.activities_list}
+        activity_options_with_all = {None: "📋 Todas as Atividades"}
+        activity_options_with_all.update(activity_options)
+        
+        selected_activity_id = st.sidebar.selectbox(
             "Selecionar Atividade:",
-            ["Todas Atividades"] + st.session_state.activities_data
+            options=list(activity_options_with_all.keys()),
+            format_func=lambda x: activity_options_with_all[x],
+            key="activity_select"
         )
-        st.sidebar.success(f"📋 Atividade: {selected_activity}")
+        
+        st.session_state.selected_activity_id = selected_activity_id
+        st.session_state.selected_activity_name = activity_options_with_all[selected_activity_id]
+        
+        st.sidebar.success(f"📋 {st.session_state.selected_activity_name}")
     else:
-        selected_activity = "Todas Atividades"
         st.sidebar.warning("⚠️ Clique em 'Carregar Atividades' primeiro")
     
     st.sidebar.markdown("---")
     
-    # ========== NÍVEL 2: CARREGAR EQUIPES ==========
+    # ========== NÍVEL 2: EQUIPES ==========
     st.sidebar.markdown("### 2️⃣ Equipes")
     
-    if st.session_state.activities_data:
+    if st.session_state.activities_list:
         if st.sidebar.button("🔄 Carregar Equipes", use_container_width=True):
             st.session_state.loading_teams = True
             with st.spinner("Carregando equipes da API..."):
-                teams = load_teams_from_api(selected_activity if selected_activity != "Todas Atividades" else None)
+                teams = load_teams_from_api(st.session_state.selected_activity_id)
                 if teams:
-                    st.session_state.teams_data = teams
+                    st.session_state.teams_list = teams
                     st.sidebar.success(f"✅ {len(teams)} equipes carregadas")
+                    with st.sidebar.expander("🏆 Ver equipes carregadas"):
+                        for team in teams[:10]:
+                            st.write(f"• {team['name']}")
+                        if len(teams) > 10:
+                            st.write(f"... e mais {len(teams)-10} equipes")
                 else:
-                    st.sidebar.error("❌ Falha ao carregar equipes")
+                    st.sidebar.error("❌ Nenhuma equipe encontrada")
             st.session_state.loading_teams = False
             st.rerun()
         
-        if st.session_state.teams_data:
-            selected_team = st.sidebar.selectbox(
+        if st.session_state.teams_list:
+            # Criar opções com nomes amigáveis
+            team_options = {team['id']: team['name'] for team in st.session_state.teams_list}
+            team_options_with_all = {None: "🏆 Todas as Equipes"}
+            team_options_with_all.update(team_options)
+            
+            selected_team_id = st.sidebar.selectbox(
                 "Selecionar Equipe:",
-                ["Todas Equipes"] + st.session_state.teams_data
+                options=list(team_options_with_all.keys()),
+                format_func=lambda x: team_options_with_all[x],
+                key="team_select"
             )
-            st.sidebar.success(f"🏆 Equipe: {selected_team}")
+            
+            st.session_state.selected_team_id = selected_team_id
+            st.session_state.selected_team_name = team_options_with_all[selected_team_id]
+            
+            st.sidebar.success(f"🏆 {st.session_state.selected_team_name}")
         else:
-            selected_team = "Todas Equipes"
-            st.sidebar.warning("⚠️ Carregue as equipes primeiro")
+            st.sidebar.warning("⚠️ Clique em 'Carregar Equipes'")
     else:
-        selected_team = "Todas Equipes"
         st.sidebar.warning("⚠️ Carregue as atividades primeiro")
     
     st.sidebar.markdown("---")
     
-    # ========== NÍVEL 3: CARREGAR ATLETAS ==========
+    # ========== NÍVEL 3: ATLETAS ==========
     st.sidebar.markdown("### 3️⃣ Atletas")
     
-    if st.session_state.teams_data:
+    if st.session_state.teams_list:
         if st.sidebar.button("🔄 Carregar Atletas", use_container_width=True):
             st.session_state.loading_players = True
             with st.spinner("Carregando atletas da API..."):
                 players = load_players_from_api(
-                    selected_team if selected_team != "Todas Equipes" else None,
-                    selected_activity if selected_activity != "Todas Atividades" else None
+                    st.session_state.selected_team_id,
+                    st.session_state.selected_activity_id
                 )
                 if players:
-                    st.session_state.players_data = players
+                    st.session_state.players_list = players
                     st.sidebar.success(f"✅ {len(players)} atletas carregados")
+                    with st.sidebar.expander("👥 Ver atletas carregados"):
+                        for player in players[:20]:
+                            st.write(f"• {player['name']}")
+                        if len(players) > 20:
+                            st.write(f"... e mais {len(players)-20} atletas")
                 else:
-                    st.sidebar.error("❌ Falha ao carregar atletas")
+                    st.sidebar.error("❌ Nenhum atleta encontrado")
             st.session_state.loading_players = False
             st.rerun()
         
-        if st.session_state.players_data:
-            selected_player = st.sidebar.selectbox(
+        if st.session_state.players_list:
+            # Criar opções com nomes amigáveis
+            player_options = {player['id']: player['name'] for player in st.session_state.players_list}
+            player_options_with_all = {None: "👥 Todos os Atletas"}
+            player_options_with_all.update(player_options)
+            
+            selected_player_id = st.sidebar.selectbox(
                 "Selecionar Atleta:",
-                ["Todos Atletas"] + st.session_state.players_data
+                options=list(player_options_with_all.keys()),
+                format_func=lambda x: player_options_with_all[x],
+                key="player_select"
             )
-            st.sidebar.success(f"👤 Atleta: {selected_player}")
+            
+            st.session_state.selected_player_id = selected_player_id
+            st.session_state.selected_player_name = player_options_with_all[selected_player_id]
+            
+            st.sidebar.success(f"👤 {st.session_state.selected_player_name}")
         else:
-            selected_player = "Todos Atletas"
-            st.sidebar.warning("⚠️ Carregue os atletas primeiro")
+            st.sidebar.warning("⚠️ Clique em 'Carregar Atletas'")
     else:
-        selected_player = "Todos Atletas"
         st.sidebar.warning("⚠️ Carregue as equipes primeiro")
     
     st.sidebar.markdown("---")
     
-    # ========== NÍVEL 4: PERÍODO E EVENTOS ==========
-    st.sidebar.markdown("### 4️⃣ Período")
+    # ========== NÍVEL 4: PERÍODO ==========
+    st.sidebar.markdown("### 4️⃣ Período de Análise")
     
     period_type = st.sidebar.radio(
         "Tipo de período:",
@@ -568,17 +719,17 @@ def main_dashboard():
     
     st.sidebar.markdown("---")
     
-    # ========== BOTÃO PARA CARREGAR EVENTOS ==========
-    st.sidebar.markdown("### 🎯 Carregar Eventos")
+    # ========== NÍVEL 5: EVENTOS ==========
+    st.sidebar.markdown("### 5️⃣ Eventos")
     
     if st.sidebar.button("📊 CARREGAR EVENTOS", type="primary", use_container_width=True):
-        if st.session_state.players_data:
+        if st.session_state.players_list:
             st.session_state.loading_events = True
             with st.spinner("Carregando eventos da API..."):
                 df_events = load_events_from_api(
-                    team_name=selected_team if selected_team != "Todas Equipes" else None,
-                    player_name=selected_player if selected_player != "Todos Atletas" else None,
-                    activity_name=selected_activity if selected_activity != "Todas Atividades" else None,
+                    team_id=st.session_state.selected_team_id,
+                    player_id=st.session_state.selected_player_id,
+                    activity_id=st.session_state.selected_activity_id,
                     start_date=start_date,
                     end_date=end_date
                 )
@@ -587,15 +738,13 @@ def main_dashboard():
                 if not df_events.empty:
                     st.sidebar.success(f"✅ {len(df_events)} eventos carregados")
                 else:
-                    st.sidebar.warning("⚠️ Nenhum evento encontrado")
+                    st.sidebar.warning("⚠️ Nenhum evento encontrado para os filtros selecionados")
             st.session_state.loading_events = False
             st.rerun()
         else:
             st.sidebar.error("❌ Carregue os atletas primeiro!")
     
-    st.sidebar.markdown("---")
-    
-    # Mostrar status dos carregamentos
+    # Mostrar status de carregamento
     if st.session_state.loading_activities:
         st.sidebar.info("⏳ Carregando atividades...")
     if st.session_state.loading_teams:
@@ -604,6 +753,12 @@ def main_dashboard():
         st.sidebar.info("⏳ Carregando atletas...")
     if st.session_state.loading_events:
         st.sidebar.info("⏳ Carregando eventos...")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Resumo dos Filtros")
+    st.sidebar.write(f"**Atividade:** {st.session_state.selected_activity_name}")
+    st.sidebar.write(f"**Equipe:** {st.session_state.selected_team_name}")
+    st.sidebar.write(f"**Atleta:** {st.session_state.selected_player_name}")
     
     # ========== DASHBOARD PRINCIPAL ==========
     
@@ -642,58 +797,110 @@ def main_dashboard():
         fig_campo = create_rugby_field()
         
         if 'pos_x' in df.columns and 'pos_y' in df.columns:
+            size_col = df['duration_min'] * 20 if 'duration_min' in df.columns else 8
+            color_col = df['confidence'] if 'confidence' in df.columns else 0.5
+            
             fig_campo.add_trace(go.Scatter(
                 x=df['pos_x'],
                 y=df['pos_y'],
                 mode='markers',
                 marker=dict(
-                    size=df['duration_min'] * 20 if 'duration_min' in df.columns else 10,
-                    color=df['confidence'] if 'confidence' in df.columns else 0.5,
+                    size=size_col,
+                    color=color_col,
                     colorscale='Viridis',
                     showscale=True,
-                    opacity=0.7
+                    colorbar=dict(title="Confiança"),
+                    opacity=0.7,
+                    line=dict(width=1, color='black')
                 ),
-                text=[f"Tipo: {row.get('tipo_evento', 'N/A')}<br>Duração: {row.get('duration_min', 0):.2f}min" 
+                text=[f"Evento: {row.get('tipo_evento', 'N/A')}<br>Duração: {row.get('duration_min', 0):.2f}min<br>Conf: {row.get('confidence', 0):.3f}" 
                       for _, row in df.iterrows()],
-                hoverinfo='text'
+                hoverinfo='text',
+                name='Eventos'
             ))
         
         st.plotly_chart(fig_campo, use_container_width=True)
         
         # Tabela de eventos
         st.markdown('<div class="sub-header">📋 Detalhe dos Eventos</div>', unsafe_allow_html=True)
-        st.dataframe(df.head(100), use_container_width=True)
         
-        # Gráficos
+        # Preparar colunas para exibição
+        display_cols = []
+        if 'tipo_evento' in df.columns:
+            display_cols.append('tipo_evento')
+        if 'atleta' in df.columns:
+            display_cols.append('atleta')
+        if 'equipe' in df.columns:
+            display_cols.append('equipe')
+        if 'duration_min' in df.columns:
+            display_cols.append('duration_min')
+        if 'confidence' in df.columns:
+            display_cols.append('confidence')
+        
+        if display_cols:
+            st.dataframe(
+                df[display_cols].head(100),
+                use_container_width=True,
+                column_config={
+                    "tipo_evento": "Tipo de Evento",
+                    "atleta": "Atleta",
+                    "equipe": "Equipe",
+                    "duration_min": "Duração (min)",
+                    "confidence": "Confiança"
+                }
+            )
+        
+        # Gráficos adicionais
         if 'tipo_evento' in df.columns:
             col_g1, col_g2 = st.columns(2)
+            
             with col_g1:
-                fig_pie = px.pie(values=df['tipo_evento'].value_counts().values,
-                                names=df['tipo_evento'].value_counts().index,
-                                title="Distribuição por Tipo")
+                event_counts = df['tipo_evento'].value_counts()
+                fig_pie = px.pie(
+                    values=event_counts.values,
+                    names=event_counts.index,
+                    title="Distribuição por Tipo de Evento",
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
                 st.plotly_chart(fig_pie, use_container_width=True)
+            
+            if 'duration_min' in df.columns:
+                with col_g2:
+                    fig_bar = px.bar(
+                        x=range(min(50, len(df))),
+                        y=df['duration_min'].head(50),
+                        title="Duração dos Eventos (minutos)",
+                        labels={"x": "Evento", "y": "Duração (min)"}
+                    )
+                    fig_bar.update_traces(marker_color='steelblue')
+                    st.plotly_chart(fig_bar, use_container_width=True)
         
-        if 'duration_min' in df.columns:
-            with col_g2:
-                fig_bar = px.bar(x=range(min(50, len(df))), y=df['duration_min'].head(50),
-                                title="Duração dos Eventos")
-                st.plotly_chart(fig_bar, use_container_width=True)
-                
     elif st.session_state.events_data is not None and st.session_state.events_data.empty:
         st.warning("⚠️ Nenhum evento encontrado para os filtros selecionados")
-        st.info("Tente ajustar o período ou selecionar diferentes equipes/atletas")
-    else:
-        st.info("👈 Selecione os filtros na barra lateral e clique em 'CARREGAR EVENTOS'")
+        st.info("💡 Tente:")
         st.markdown("""
-        ### Como usar:
+        - Selecionar um período maior
+        - Escolher uma equipe diferente
+        - Carregar dados de outra atividade
+        """)
+    else:
+        st.info("👈 **Como usar:**")
+        st.markdown("""
         1. **Carregue as Atividades** - Clique no botão na sidebar
         2. **Carregue as Equipes** - Baseado na atividade selecionada
         3. **Carregue os Atletas** - Baseado na equipe selecionada
-        4. **Defina o Período** - Escolha os dias
+        4. **Defina o Período** - Escolha os dias da análise
         5. **Carregue os Eventos** - Clique no botão principal
         
-        Os dados serão carregados em cascata da API real da Catapult!
+        ✅ Todos os dados são carregados em **cascata** da API real da Catapult!
+        📋 Você verá **nomes reais** de atividades, equipes e atletas, não códigos ou IDs!
         """)
+    
+    # Footer
+    st.markdown("---")
+    st.caption("🏉 BIG Report - Análise de Retorno à Atividade | Powered by Catapult Sports API")
+    if st.session_state.events_data is not None and not st.session_state.events_data.empty:
+        st.caption(f"📊 Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
 # ==================== MAIN ====================
 
