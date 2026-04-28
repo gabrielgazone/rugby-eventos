@@ -14,8 +14,6 @@ st.markdown("""
 <style>
 .main-header { font-size: 2.5rem; font-weight: bold; color: #1f3b73; text-align: center; margin-bottom: 1rem; }
 .sub-header { font-size: 1.5rem; font-weight: bold; color: #2c5aa0; margin-top: 1rem; margin-bottom: 1rem; }
-.metric-card { background-color: #f0f2f6; padding: 1rem; border-radius: 10px; text-align: center; }
-.stats-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; color: white; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -229,11 +227,9 @@ def load_events(team_id=None, player_id=None, activity_id=None, days=30):
         start_times.append(current_time.timestamp())
         current_time = current_time + timedelta(seconds=np.random.randint(30, 300))
     
-    # Gerar eventos mais realistas - concentrados nas áreas de jogo
     pos_x = []
     pos_y = []
     for _ in range(n_events):
-        # Mais eventos no meio do campo
         if np.random.random() < 0.6:
             pos_x.append(np.random.normal(50, 20))
         else:
@@ -263,87 +259,60 @@ def load_events(team_id=None, player_id=None, activity_id=None, days=30):
     return df
 
 def create_enhanced_rugby_field():
-    """Campo de rugby melhorado com visual profissional"""
-    
     field_length = 100
     field_width = 70
     
     fig = go.Figure()
     
-    # Gramado com gradiente
     fig.add_shape(type="rect", x0=0, x1=field_length, y0=0, y1=field_width,
                   fillcolor="#228B22", line=dict(color="#1a6b1a", width=3), layer="below")
     
-    # Linhas do campo (mais grossas e visíveis)
-    # Linha de meio-campo
-    fig.add_shape(type="line", x0=50, x1=50, y0=0, y1=field_width,
-                  line=dict(color="white", width=4))
+    fig.add_shape(type="line", x0=50, x1=50, y0=0, y1=field_width, line=dict(color="white", width=4))
+    fig.add_shape(type="line", x0=22, x1=22, y0=0, y1=field_width, line=dict(color="white", width=3, dash="dash"))
+    fig.add_shape(type="line", x0=78, x1=78, y0=0, y1=field_width, line=dict(color="white", width=3, dash="dash"))
+    fig.add_shape(type="line", x0=10, x1=10, y0=0, y1=field_width, line=dict(color="white", width=2, dash="dot"))
+    fig.add_shape(type="line", x0=90, x1=90, y0=0, y1=field_width, line=dict(color="white", width=2, dash="dot"))
+    fig.add_shape(type="rect", x0=0, x1=field_length, y0=0, y1=field_width, line=dict(color="white", width=4), fillcolor=None)
     
-    # Linhas de 22m
-    fig.add_shape(type="line", x0=22, x1=22, y0=0, y1=field_width,
-                  line=dict(color="white", width=3, dash="dash"))
-    fig.add_shape(type="line", x0=78, x1=78, y0=0, y1=field_width,
-                  line=dict(color="white", width=3, dash="dash"))
+    fig.add_shape(type="line", x0=100, x1=100, y0=field_width/2-6, y1=field_width/2+6, line=dict(color="#FFD700", width=4))
+    fig.add_shape(type="line", x0=0, x1=0, y0=field_width/2-6, y1=field_width/2+6, line=dict(color="#FFD700", width=4))
     
-    # Linhas de 10m
-    fig.add_shape(type="line", x0=10, x1=10, y0=0, y1=field_width,
-                  line=dict(color="white", width=2, dash="dot"))
-    fig.add_shape(type="line", x0=90, x1=90, y0=0, y1=field_width,
-                  line=dict(color="white", width=2, dash="dot"))
-    
-    # Linhas laterais
-    fig.add_shape(type="rect", x0=0, x1=field_length, y0=0, y1=field_width,
-                  line=dict(color="white", width=4), fillcolor=None)
-    
-    # Traves (postes)
-    fig.add_shape(type="line", x0=100, x1=100, y0=field_width/2-6, y1=field_width/2+6,
-                  line=dict(color="#FFD700", width=4))
-    fig.add_shape(type="line", x0=0, x1=0, y0=field_width/2-6, y1=field_width/2+6,
-                  line=dict(color="#FFD700", width=4))
-    
-    # Círculo central
     fig.add_shape(type="circle", x0=47, x1=53, y0=field_width/2-3, y1=field_width/2+3,
                   line=dict(color="white", width=2), fillcolor=None)
     
-    # Configuração do layout
     fig.update_layout(
-        title=dict(text="🏟️ ESTÁDIO DE RUGBY - Dimensões Oficiais (100m x 70m)", font=dict(size=16, color="#1f3b73")),
-        xaxis=dict(title="<b>Comprimento (metros)</b>", range=[-5, 105], showgrid=True, gridcolor="rgba(255,255,255,0.2)", zeroline=False),
-        yaxis=dict(title="<b>Largura (metros)</b>", range=[-5, 75], showgrid=True, gridcolor="rgba(255,255,255,0.2)", zeroline=False),
+        title="🏟️ Campo de Rugby - Dimensões Oficiais (100m x 70m)",
+        xaxis=dict(title="Comprimento (m)", range=[-5, 105], showgrid=True, gridcolor="rgba(255,255,255,0.2)"),
+        yaxis=dict(title="Largura (m)", range=[-5, 75], showgrid=True, gridcolor="rgba(255,255,255,0.2)"),
         plot_bgcolor="#228B22",
-        paper_bgcolor="#f5f5f5",
         height=600,
         hovermode='closest'
     )
     
-    # Anotações informativas
     annotations = [
-        dict(x=50, y=field_width+3, text="🏉 LINHA DE MEIO CAMPO (50m)", showarrow=False, font=dict(size=11, color="#1f3b73", weight="bold")),
+        dict(x=50, y=field_width+3, text="🏉 LINHA DE MEIO CAMPO (50m)", showarrow=False, font=dict(size=11, color="#1f3b73")),
         dict(x=11, y=field_width+3, text="📏 LINHA DE 22m", showarrow=False, font=dict(size=10, color="#dc3545")),
         dict(x=89, y=field_width+3, text="📏 LINHA DE 22m", showarrow=False, font=dict(size=10, color="#dc3545")),
         dict(x=5, y=field_width/2, text="10m", showarrow=False, font=dict(size=9, color="white")),
         dict(x=95, y=field_width/2, text="10m", showarrow=False, font=dict(size=9, color="white")),
-        dict(x=-3, y=field_width/2, text="🏉 IN-GOAL", showarrow=False, font=dict(size=10, color="#FFD700", weight="bold")),
-        dict(x=field_length+3, y=field_width/2, text="🏉 IN-GOAL", showarrow=False, font=dict(size=10, color="#FFD700", weight="bold"))
+        dict(x=-3, y=field_width/2, text="🏉 IN-GOAL", showarrow=False, font=dict(size=10, color="#FFD700")),
+        dict(x=field_length+3, y=field_width/2, text="🏉 IN-GOAL", showarrow=False, font=dict(size=10, color="#FFD700"))
     ]
     fig.update_layout(annotations=annotations)
     
     return fig
 
 def create_heatmap(df):
-    """Cria mapa de calor da atividade no campo"""
     if df.empty or 'pos_x' not in df.columns or 'pos_y' not in df.columns:
         return None
     
     fig = go.Figure()
     
-    # Campo de fundo
     fig.add_shape(type="rect", x0=0, x1=100, y0=0, y1=70, fillcolor="#228B22", line=dict(color="white", width=2), layer="below")
     fig.add_shape(type="line", x0=50, x1=50, y0=0, y1=70, line=dict(color="white", width=3))
     fig.add_shape(type="line", x0=22, x1=22, y0=0, y1=70, line=dict(color="white", width=2, dash="dash"))
     fig.add_shape(type="line", x0=78, x1=78, y0=0, y1=70, line=dict(color="white", width=2, dash="dash"))
     
-    # Mapa de calor 2D
     heatmap = go.Histogram2dContour(
         x=df['pos_x'], y=df['pos_y'],
         colorscale='Hot',
@@ -400,11 +369,9 @@ elif st.session_state.step == 'dashboard':
     if st.session_state.use_mock:
         st.info("📊 Modo de demonstração ativado - Visualização com dados simulados")
     
-    # Sidebar melhorada
     st.sidebar.markdown("## 📂 CONTROLE DE FILTROS")
     st.sidebar.markdown("---")
     
-    # Carregamento em cascata
     with st.sidebar.expander("1️⃣ ATIVIDADES", expanded=True):
         if st.button("🔄 Atualizar Atividades", use_container_width=True):
             with st.spinner("Carregando..."):
@@ -501,68 +468,29 @@ elif st.session_state.step == 'dashboard':
     st.sidebar.markdown(f"**👤 Atleta:** {st.session_state.selected_player_name}")
     st.sidebar.markdown(f"**📅 Período:** {st.session_state.days_period} dias")
     
-    # Dashboard principal
+    # DASHBOARD PRINCIPAL
     if st.session_state.events_df is not None and not st.session_state.events_df.empty:
         df = st.session_state.events_df.copy()
         
         if selected_event_type != "Todos" and 'tipo_evento' in df.columns:
             df = df[df['tipo_evento'] == selected_event_type]
         
-        # Métricas melhoradas
-        st.markdown("### 📊 MÉTRICAS DE DESEMPENHO")
+        # Métricas
         col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; text-align: center;">
-                <h3 style="margin:0; color:white;">{len(df)}</h3>
-                <p style="margin:0; color:rgba(255,255,255,0.9);">Total Eventos</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 1rem; border-radius: 10px; text-align: center;">
-                <h3 style="margin:0; color:white;">{df['duration_min'].mean():.2f} min</h3>
-                <p style="margin:0; color:rgba(255,255,255,0.9);">Duração Média</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 1rem; border-radius: 10px; text-align: center;">
-                <h3 style="margin:0; color:white;">{df['duration_min'].sum():.2f} min</h3>
-                <p style="margin:0; color:rgba(255,255,255,0.9);">Carga Total</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); padding: 1rem; border-radius: 10px; text-align: center;">
-                <h3 style="margin:0; color:white;">{df['confidence'].mean():.3f}</h3>
-                <p style="margin:0; color:rgba(255,255,255,0.9);">Confiança Média</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col5:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); padding: 1rem; border-radius: 10px; text-align: center;">
-                <h3 style="margin:0; color:white;">{df['back_in_game_min'].mean():.2f} min</h3>
-                <p style="margin:0; color:rgba(255,255,255,0.9);">Intervalo Médio</p>
-            </div>
-            """, unsafe_allow_html=True)
+        col1.metric("📊 Total Eventos", len(df))
+        col2.metric("⏱️ Duração Média", f"{df['duration_min'].mean():.2f} min")
+        col3.metric("⚡ Carga Total", f"{df['duration_min'].sum():.2f} min")
+        col4.metric("🎯 Confiança Média", f"{df['confidence'].mean():.3f}")
+        col5.metric("🔄 Intervalo Médio", f"{df['back_in_game_min'].mean():.2f} min")
         
         st.markdown("---")
         
-        # Campo de Rugby Melhorado
-        st.markdown('<div class="sub-header">🏟️ VISUALIZAÇÃO DO CAMPO DE RUGBY</div>', unsafe_allow_html=True)
-        
-        tab1, tab2, tab3 = st.tabs(["📍 Eventos no Campo", "🔥 Mapa de Calor", "📈 Estatísticas"])
+        # TABS
+        tab1, tab2, tab3, tab4 = st.tabs(["🏟️ EVENTOS NO CAMPO", "🔥 MAPA DE CALOR", "📊 ESTATÍSTICAS", "📈 ANÁLISE AVANÇADA"])
         
         with tab1:
             fig_campo = create_enhanced_rugby_field()
             
-            # Cores por tipo de evento
             color_map = {
                 '💥 Contact': '#FF4444',
                 '🏋️ Tackle': '#FF8844',
@@ -572,29 +500,26 @@ elif st.session_state.step == 'dashboard':
                 '📏 Lineout': '#FFFF44'
             }
             
-            for event_type in df['tipo_evento'].unique():
-                df_type = df[df['tipo_evento'] == event_type]
-                color = color_map.get(event_type, '#888888')
+            for tipo in df['tipo_evento'].unique():
+                df_tipo = df[df['tipo_evento'] == tipo]
+                color = color_map.get(tipo, '#888888')
                 
                 fig_campo.add_trace(go.Scatter(
-                    x=df_type['pos_x'], y=df_type['pos_y'],
+                    x=df_tipo['pos_x'], y=df_tipo['pos_y'],
                     mode='markers',
-                    name=event_type,
+                    name=tipo,
                     marker=dict(
-                        size=df_type['duration_min'] * 35,
+                        size=df_tipo['duration_min'] * 35,
                         color=color,
                         opacity=0.7,
-                        line=dict(width=2, color='white'),
-                        symbol='circle'
+                        line=dict(width=2, color='white')
                     ),
-                    text=[f"<b>{row['tipo_evento']}</b><br>⏱️ Duração: {row['duration_min']:.2f} min<br>🎯 Confiança: {row['confidence']:.3f}<br>📊 Carga: {row['duration_min']:.2f}" for _, row in df_type.iterrows()],
-                    hoverinfo='text',
-                    hovertemplate='%{text}<extra></extra>'
+                    text=[f"<b>{row['tipo_evento']}</b><br>⏱️ Duração: {row['duration_min']:.2f} min<br>🎯 Confiança: {row['confidence']:.3f}" for _, row in df_tipo.iterrows()],
+                    hoverinfo='text'
                 ))
             
             st.plotly_chart(fig_campo, use_container_width=True)
             
-            # Legenda interativa
             st.markdown("""
             <div style="background: #f8f9fa; padding: 0.8rem; border-radius: 10px; margin-top: 0.5rem;">
                 <b>📖 LEGENDA:</b>
@@ -605,7 +530,7 @@ elif st.session_state.step == 'dashboard':
                 <span style="color:#FF44FF;">🟣 Scrum</span> •
                 <span style="color:#FFFF44;">🟡 Lineout</span>
                 <br>
-                <small>💡 O tamanho do círculo representa a duração do evento | Quanto maior, mais longo o evento</small>
+                <small>💡 O tamanho do círculo representa a duração do evento</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -619,7 +544,6 @@ elif st.session_state.step == 'dashboard':
         with tab3:
             col_est1, col_est2 = st.columns(2)
             with col_est1:
-                # Estatísticas por tipo
                 stats = df.groupby('tipo_evento').agg({
                     'duration_min': ['count', 'mean', 'sum'],
                     'confidence': 'mean'
@@ -628,129 +552,84 @@ elif st.session_state.step == 'dashboard':
                 st.dataframe(stats, use_container_width=True)
             
             with col_est2:
-                # Top eventos mais longos
-                top_events = df.nlargest(10, 'duration_min')[['tipo_evento', 'duration_min', 'confidence']]
-                top_events.columns = ['Tipo', 'Duração (min)', 'Confiança']
-                st.dataframe(top_events, use_container_width=True)
+                def get_intensity(conf):
+                    if conf >= 0.95:
+                        return "🟢 Alta"
+                    elif conf >= 0.85:
+                        return "🟡 Média"
+                    return "🔴 Baixa"
+                
+                df['Intensidade'] = df['confidence'].apply(get_intensity)
+                
+                display_cols = ['tipo_evento', 'duration_min', 'back_in_game_min', 'confidence', 'Intensidade']
+                if 'equipe' in df.columns and st.session_state.selected_team_id is None:
+                    display_cols.insert(1, 'equipe')
+                if 'atleta' in df.columns and st.session_state.selected_player_id is None:
+                    display_cols.insert(2, 'atleta')
+                
+                st.dataframe(df[display_cols].head(50), use_container_width=True)
         
-        # Tabela de eventos melhorada
-        st.markdown('<div class="sub-header">📋 DETALHAMENTO DOS EVENTOS</div>', unsafe_allow_html=True)
-        
-        df_display = df.copy()
-        
-        # Adicionar coluna de intensidade
-        def get_intensity(conf):
-            if conf >= 0.95:
-                return "🟢 Alta"
-            elif conf >= 0.85:
-                return "🟡 Média"
-            return "🔴 Baixa"
-        
-        df_display['Intensidade'] = df_display['confidence'].apply(get_intensity)
-        
-        display_cols = ['tipo_evento', 'duration_min', 'back_in_game_min', 'confidence', 'Intensidade']
-        if 'equipe' in df_display.columns:
-            display_cols.insert(1, 'equipe')
-        if 'atleta' in df_display.columns:
-            display_cols.insert(2, 'atleta')
-        
-        st.dataframe(
-            df_display[display_cols].head(50),
-            use_container_width=True,
-            column_config={
-                "tipo_evento": "Tipo de Evento",
-                "equipe": "Equipe",
-                "atleta": "Atleta",
-                "duration_min": "Duração (min)",
-                "back_in_game_min": "Intervalo (min)",
-                "confidence": "Confiança",
-                "Intensidade": "Intensidade"
-            }
-        )
-        
-        # Gráficos de análise
-        st.markdown('<div class="sub-header">📈 ANÁLISE AVANÇADA</div>', unsafe_allow_html=True)
-        
-        col_g1, col_g2 = st.columns(2)
-        
-        with col_g1:
-            # Gráfico de pizza interativo
-            fig_pie = px.pie(
-                values=df['tipo_evento'].value_counts().values,
-                names=df['tipo_evento'].value_counts().index,
-                title="📊 Distribuição por Tipo de Evento",
-                color_discrete_sequence=px.colors.qualitative.Set3,
-                hole=0.3
-            )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col_g2:
-            # Gráfico de barras horizontal
-            top_events_type = df['tipo_evento'].value_counts().head(6)
-            fig_bar_h = px.bar(
-                x=top_events_type.values, y=top_events_type.index,
-                orientation='h', title="📊 Frequência por Tipo",
-                color=top_events_type.values, color_continuous_scale='Viridis'
-            )
-            fig_bar_h.update_layout(xaxis_title="Quantidade", yaxis_title="Tipo de Evento")
-            st.plotly_chart(fig_bar_h, use_container_width=True)
-        
-        col_g3, col_g4 = st.columns(2)
-        
-        with col_g3:
-            # Gráfico de linha do tempo com área
-            fig_timeline = px.area(
-                x=range(len(df)), y=df['back_in_game_min'],
-                title="⏱️ Evolução do Tempo entre Eventos",
-                labels={"x": "Sequência de Eventos", "y": "Tempo (min)"},
-                color_discrete_sequence=['#FF6B6B']
-            )
-            fig_timeline.update_traces(fill='tozeroy')
-            st.plotly_chart(fig_timeline, use_container_width=True)
-        
-        with col_g4:
-            # Gráfico de dispersão com tamanho
-            fig_scatter = px.scatter(
-                x=range(len(df)), y=df['confidence'],
-                title="🎯 Distribuição da Confiança",
-                labels={"x": "Evento", "y": "Confiança"},
-                color=df['confidence'],
-                size=df['duration_min'],
-                color_continuous_scale='RdYlGn',
-                size_max=20
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
-        
-        # Mapa de calor de correlação
-        st.markdown('<div class="sub-header">📊 MATRIZ DE CORRELAÇÃO</div>', unsafe_allow_html=True)
-        
-        corr_cols = ['duration_min', 'back_in_game_min', 'confidence']
-        if all(col in df.columns for col in corr_cols):
-            corr_matrix = df[corr_cols].corr()
-            fig_corr = px.imshow(
-                corr_matrix,
-                text_auto=True,
-                title="Correlação entre métricas",
-                color_continuous_scale='RdBu',
-                aspect='auto'
-            )
-            st.plotly_chart(fig_corr, use_container_width=True)
+        with tab4:
+            col_g1, col_g2 = st.columns(2)
+            
+            with col_g1:
+                counts = df['tipo_evento'].value_counts()
+                fig_pie = px.pie(values=counts.values, names=counts.index, title="Distribuição por Tipo", hole=0.3)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_g2:
+                fig_bar = px.bar(
+                    x=counts.index,
+                    y=counts.values,
+                    title="Frequência por Tipo",
+                    color=counts.values,
+                    color_continuous_scale='Viridis'
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+            
+            col_g3, col_g4 = st.columns(2)
+            
+            with col_g3:
+                fig_timeline = px.area(
+                    x=list(range(len(df))),
+                    y=df['back_in_game_min'],
+                    title="Evolução do Tempo entre Eventos",
+                    labels={"x": "Sequência", "y": "Tempo (min)"}
+                )
+                fig_timeline.update_traces(fill='tozeroy', line=dict(color='orange', width=2))
+                st.plotly_chart(fig_timeline, use_container_width=True)
+            
+            with col_g4:
+                fig_scatter = px.scatter(
+                    x=list(range(len(df))),
+                    y=df['confidence'],
+                    title="Distribuição da Confiança",
+                    labels={"x": "Evento", "y": "Confiança"},
+                    color=df['confidence'],
+                    size=df['duration_min'],
+                    color_continuous_scale='RdYlGn'
+                )
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            if all(col in df.columns for col in ['duration_min', 'back_in_game_min', 'confidence']):
+                corr_matrix = df[['duration_min', 'back_in_game_min', 'confidence']].corr()
+                fig_corr = px.imshow(corr_matrix, text_auto=True, title="Matriz de Correlação", color_continuous_scale='RdBu', aspect='auto')
+                st.plotly_chart(fig_corr, use_container_width=True)
     
     elif st.session_state.events_df is not None:
         st.warning("⚠️ Nenhum evento encontrado para os filtros selecionados")
         st.info("💡 **Sugestões:** Aumente o período de análise ou selecione diferentes filtros")
     
     else:
-        st.info("👈 **INSTRUÇÕES:** Selecione os filtros na barra lateral e clique em 'CARREGAR EVENTOS' para visualizar os dados")
+        st.info("👈 **Selecione os filtros na barra lateral e clique em 'CARREGAR EVENTOS'**")
         st.markdown("""
         <div style="background: #e3f2fd; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
             <b>📌 Como usar o dashboard:</b><br>
-            1. Clique em "Atualizar Atividades" para carregar as atividades disponíveis<br>
-            2. Clique em "Atualizar Equipes" para carregar as equipes<br>
-            3. Clique em "Atualizar Atletas" para carregar os atletas<br>
-            4. Ajuste o período e o tipo de evento desejado<br>
-            5. Clique em "CARREGAR EVENTOS" para visualizar os dados no campo<br>
+            1. Clique em "Atualizar Atividades"<br>
+            2. Clique em "Atualizar Equipes"<br>
+            3. Clique em "Atualizar Atletas"<br>
+            4. Ajuste o período e o tipo de evento<br>
+            5. Clique em "CARREGAR EVENTOS"<br>
             <br>
             <b>🎨 Visualização:</b> Eventos coloridos por tipo, tamanho proporcional à duração
         </div>
