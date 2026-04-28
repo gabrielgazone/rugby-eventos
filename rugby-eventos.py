@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
 import json
-import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuração da página
 st.set_page_config(
@@ -31,15 +31,6 @@ st.markdown("""
         margin-top: 1rem;
         margin-bottom: 1rem;
     }
-    .debug-box {
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 5px;
-        padding: 1rem;
-        font-family: monospace;
-        font-size: 0.8rem;
-        margin-top: 1rem;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -55,12 +46,10 @@ def init_session_state():
         st.session_state.api_url = None
     if 'api_headers' not in st.session_state:
         st.session_state.api_headers = None
-    if 'working_endpoints' not in st.session_state:
-        st.session_state.working_endpoints = {}
-    if 'debug_logs' not in st.session_state:
-        st.session_state.debug_logs = []
+    if 'api_base_path' not in st.session_state:
+        st.session_state.api_base_path = None
     
-    # Dados com nomes e IDs
+    # Dados
     if 'activities_list' not in st.session_state:
         st.session_state.activities_list = []
     if 'teams_list' not in st.session_state:
@@ -82,155 +71,119 @@ def init_session_state():
     if 'selected_player_name' not in st.session_state:
         st.session_state.selected_player_name = "Todos"
     
-    # Dados de eventos
+    # Eventos
     if 'events_data' not in st.session_state:
         st.session_state.events_data = None
 
-def add_debug_log(message, type="info"):
-    """Adiciona log de debug"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    st.session_state.debug_logs.append(f"[{timestamp}] {type.upper()}: {message}")
+# ==================== CONEXÃO RÁPIDA (APENAS URLs MAIS PROVÁVEIS) ====================
 
-# ==================== DESCOBERTA DE ENDPOINTS MELHORADA ====================
-
-def test_url(url, headers, params=None):
-    """Testa uma URL e retorna resultado"""
+def quick_test_endpoint(url, headers, timeout=3):
+    """Testa um endpoint rapidamente"""
     try:
-        add_debug_log(f"Testando: {url}")
-        response = requests.get(url, headers=headers, timeout=10, params=params or {"limit": 1})
-        add_debug_log(f"  Status: {response.status_code}")
-        return response.status_code == 200, response.status_code
-    except Exception as e:
-        add_debug_log(f"  Erro: {str(e)[:100]}")
-        return False, None
+        response = requests.get(url, headers=headers, timeout=timeout, params={"limit": 1})
+        return response.status_code == 200, url
+    except:
+        return False, url
 
-def discover_endpoints(token, base_url):
-    """Descobre automaticamente os endpoints corretos da API"""
+def discover_endpoints_fast(token, base_url):
+    """Descobre endpoints rapidamente - testa apenas as URLs mais prováveis"""
     
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
     
-    # Lista MUITO MAIS ABRANGENTE de possíveis caminhos
-    possible_paths = [
-        "",  # root
-        "/api",
+    # Apenas os paths mais prováveis (reduzido de 25 para 4)
+    most_likely_paths = [
         "/api/v1",
         "/v1",
-        "/v2",
-        "/v3",
-        "/rest",
-        "/api/rest",
-        "/openfield",
-        "/openfield/api",
-        "/openfield/api/v1",
-        "/openfield/v1",
-        "/services",
-        "/data",
-        "/api/data",
-        "/apis",
-        "/apis/v1",
-        "/api/v2",
-        "/public",
-        "/api/public",
-        "/api/v1/public",
-        "/graphql",
-        "/api/graphql"
+        "/api",
+        ""
     ]
     
-    # URLs base alternativas para testar
-    alternative_base_urls = [
-        base_url,
-        base_url.replace("backend-us", "backend-eu"),
-        base_url.replace("backend-us", "backend-asia"),
-        base_url.replace("backend-us", "api"),
-        "https://api.catapult.com",
-        "https://api.openfield.catapultsports.com",
-        "https://openfield.catapultsports.com/api",
-        base_url.replace(".openfield.catapultsports.com", ".catapultsports.com")
-    ]
+    # Apenas os recursos essenciais
+    essential_resources = ["activities", "teams", "players"]
     
-    # Recursos comuns para testar
-    resources = ["activities", "teams", "players", "events", "sessions", "users"]
+    # URLs para testar (apenas a fornecida + variação regional)
+    urls_to_test = []
+    
+    for path in most_likely_paths:
+        for resource in essential_resources:
+            if path:
+                url = f"{base_url}{path}/{resource}"
+            else:
+                url = f"{base_url}/{resource}"
+            urls_to_test.append((resource, url))
+    
+    # Testar também variação europeia se a URL for americana
+    if "backend-us" in base_url:
+        euro_url = base_url.replace("backend-us", "backend-eu")
+        for path in most_likely_paths[:2]:  # Apenas os 2 primeiros paths
+            for resource in essential_resources[:1]:  # Apenas activities
+                if path:
+                    url = f"{euro_url}{path}/{resource}"
+                else:
+                    url = f"{euro_url}/{resource}"
+                urls_to_test.append((resource, url))
+    
+    st.info("🔍 Testando conexão (isso leva apenas alguns segundos)...")
     
     working_endpoints = {}
+    tested = 0
     
-    st.info("🔍 Testando múltiplas configurações de API...")
-    
-    progress_bar = st.progress(0)
-    total_tests = len(alternative_base_urls) * len(possible_paths) * len(resources)
-    test_count = 0
-    
-    # Limpar logs anteriores
-    st.session_state.debug_logs = []
-    add_debug_log(f"Iniciando descoberta de endpoints")
-    add_debug_log(f"Token: {token[:50]}... (truncado)")
-    
-    for base_url_test in alternative_base_urls:
-        add_debug_log(f"\n📡 Testando URL base: {base_url_test}")
+    for resource, url in urls_to_test:
+        tested += 1
+        # Mostrar progresso simples
+        if tested % 5 == 0:
+            st.caption(f"Testando... {tested}/{len(urls_to_test)}")
         
-        for path in possible_paths:
-            for resource in resources:
-                test_count += 1
-                progress_bar.progress(min(test_count / total_tests, 1.0))
-                
-                # Construir URL completa
-                if path:
-                    url = f"{base_url_test}{path}/{resource}"
-                else:
-                    url = f"{base_url_test}/{resource}"
-                
-                success, status = test_url(url, headers)
-                
-                if success:
-                    add_debug_log(f"✅ ENDPOINT ENCONTRADO: {resource} -> {url}")
-                    if resource not in working_endpoints:
-                        working_endpoints[resource] = url
-                        working_endpoints['base_url_working'] = base_url_test
-                        working_endpoints['path_working'] = path
-                    break  # Encontrou este recurso, próximo
-                
-            # Se já encontrou todos os recursos essenciais, para
-            if len(working_endpoints) >= 3:
+        success, _ = quick_test_endpoint(url, headers, timeout=2)
+        
+        if success:
+            if resource not in working_endpoints:
+                working_endpoints[resource] = url
+                # Se encontrou activities, já podemos extrair o base_path
+                if resource == "activities":
+                    # Extrair o caminho base
+                    if "/activities" in url:
+                        st.session_state.api_base_path = url.replace("/activities", "")
+                    st.success(f"✅ Conectado! Endpoint: {url}")
+                    # Podemos parar se já encontrou os 3 essenciais
+                    if len(working_endpoints) >= 2:
+                        break
+    
+    # Se não encontrou nada, tentar URL direta sem path
+    if not working_endpoints:
+        for resource in essential_resources:
+            url = f"{base_url}/{resource}"
+            success, _ = quick_test_endpoint(url, headers, timeout=2)
+            if success:
+                working_endpoints[resource] = url
+                if resource == "activities":
+                    st.session_state.api_base_path = base_url
                 break
-        
-        # Se já encontrou todos os recursos essenciais, para
-        if len(working_endpoints) >= 3:
-            break
     
-    progress_bar.empty()
-    
-    # Verificar recursos essenciais
-    essential_resources = ["activities", "teams", "players"]
-    found_essential = [r for r in essential_resources if r in working_endpoints]
-    
-    add_debug_log(f"\n📊 Resumo: Encontrados {len(working_endpoints)} endpoints")
-    add_debug_log(f"Essenciais encontrados: {found_essential}")
-    
-    if working_endpoints:
-        return working_endpoints
-    else:
-        return None
+    return working_endpoints if working_endpoints else None
 
-# ==================== FUNÇÕES GENÉRICAS DE CARREGAMENTO ====================
+# ==================== FUNÇÕES DE CARREGAMENTO RÁPIDO ====================
 
-def load_data(resource_name, params=None):
-    """Carrega dados de um recurso da API usando endpoint descoberto"""
+def load_data_fast(resource_name, params=None):
+    """Carrega dados rapidamente"""
     if not st.session_state.api_headers:
         return []
     
-    if resource_name not in st.session_state.working_endpoints:
-        st.error(f"Endpoint para {resource_name} não encontrado")
-        return []
-    
-    endpoint_url = st.session_state.working_endpoints[resource_name]
+    # Construir URL
+    if st.session_state.api_base_path:
+        url = f"{st.session_state.api_base_path}/{resource_name}"
+    else:
+        # Tentar URL direta
+        url = f"{st.session_state.api_url}/{resource_name}"
     
     try:
         response = requests.get(
-            endpoint_url,
+            url,
             headers=st.session_state.api_headers,
-            timeout=15,
+            timeout=10,
             params=params or {"limit": 200}
         )
         
@@ -240,28 +193,27 @@ def load_data(resource_name, params=None):
             if isinstance(data, list):
                 return data
             elif isinstance(data, dict):
-                for key in ['data', 'items', 'results', resource_name, 'response']:
+                for key in ['data', 'items', 'results', resource_name]:
                     if key in data and isinstance(data[key], list):
                         return data[key]
-                return [data]
+                return [data] if data else []
             else:
                 return []
         else:
-            st.error(f"Erro {response.status_code} ao carregar {resource_name}")
             return []
             
     except Exception as e:
-        st.error(f"Erro ao carregar {resource_name}: {str(e)}")
+        st.error(f"Erro: {str(e)[:100]}")
         return []
 
 def load_activities():
     """Carrega atividades"""
-    data = load_data("activities")
+    data = load_data_fast("activities")
     
     activities = []
     for item in data:
-        act_id = item.get('id') or item.get('activity_id') or item.get('uid')
-        act_name = item.get('name') or item.get('title') or item.get('description')
+        act_id = item.get('id') or item.get('activity_id')
+        act_name = item.get('name') or item.get('title')
         if act_id and act_name:
             activities.append({"id": act_id, "name": act_name})
     
@@ -273,11 +225,11 @@ def load_teams(activity_id=None):
     if activity_id:
         params["activity_id"] = activity_id
     
-    data = load_data("teams", params)
+    data = load_data_fast("teams", params)
     
     teams = []
     for item in data:
-        team_id = item.get('id') or item.get('team_id') or item.get('uid')
+        team_id = item.get('id') or item.get('team_id')
         team_name = item.get('name') or item.get('team_name')
         if team_id and team_name:
             teams.append({"id": team_id, "name": team_name})
@@ -292,14 +244,14 @@ def load_players(team_id=None, activity_id=None):
     if activity_id:
         params["activity_id"] = activity_id
     
-    data = load_data("players", params)
+    data = load_data_fast("players", params)
     
     players = []
     for item in data:
-        player_id = item.get('id') or item.get('player_id') or item.get('uid')
-        player_name = item.get('name') or item.get('full_name') or item.get('first_name')
+        player_id = item.get('id') or item.get('player_id')
+        player_name = item.get('name') or item.get('full_name')
         if player_id and player_name:
-            number = item.get('number') or item.get('jersey_number') or item.get('jersey')
+            number = item.get('number') or item.get('jersey_number')
             if number:
                 player_name = f"{player_name} (#{number})"
             players.append({"id": player_id, "name": player_name})
@@ -321,7 +273,7 @@ def load_events(team_id=None, player_id=None, activity_id=None, start_date=None,
     if end_date:
         params["end_date"] = end_date.isoformat() if isinstance(end_date, datetime) else str(end_date)
     
-    data = load_data("events", params)
+    data = load_data_fast("events", params)
     
     if data:
         return pd.DataFrame(data)
@@ -369,16 +321,15 @@ def create_rugby_field():
     
     return fig
 
-# ==================== TELA DE LOGIN ====================
+# ==================== TELA DE LOGIN RÁPIDA ====================
 
 def login_screen():
-    """Tela de login com diagnóstico automático"""
+    """Tela de login rápida"""
     
     st.markdown("""
         <div style="text-align: center; margin-top: 30px;">
             <h1 style="color: #1f3b73;">🏉 BIG Report - Rugby Analytics</h1>
             <h3 style="color: #2c5aa0;">Catapult OpenField Integration</h3>
-            <p style="margin-top: 20px;">Conecte-se à API para acessar dados reais</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -390,113 +341,61 @@ def login_screen():
             
             api_token = st.text_area(
                 "Token JWT:",
-                height=120,
+                height=100,
                 placeholder="Cole seu token JWT aqui...",
                 help="Token fornecido pela Catapult Sports",
-                value=""  # Campo vazio
+                value=""
             )
             
-            # Limpar token (remover espaços e quebras de linha extras)
+            # Limpar token
             if api_token:
                 api_token = api_token.strip().replace('\n', '').replace('\r', '')
             
-            # Múltiplas opções de URL
-            url_options = st.radio(
-                "Região da API:",
-                ["América do Norte (padrão)", "Europa", "Ásia", "Personalizado"],
-                horizontal=True
+            # Opção de região simplificada
+            region = st.selectbox(
+                "Região:",
+                ["América do Norte", "Europa", "Ásia", "Personalizado"]
             )
             
-            if url_options == "América do Norte (padrão)":
+            if region == "América do Norte":
                 api_url = "https://backend-us.openfield.catapultsports.com"
-            elif url_options == "Europa":
+            elif region == "Europa":
                 api_url = "https://backend-eu.openfield.catapultsports.com"
-            elif url_options == "Ásia":
+            elif region == "Ásia":
                 api_url = "https://backend-asia.openfield.catapultsports.com"
             else:
-                api_url = st.text_input(
-                    "URL Personalizada:",
-                    value="https://backend-us.openfield.catapultsports.com",
-                    help="Digite a URL completa da API"
-                )
+                api_url = st.text_input("URL:", value="https://backend-us.openfield.catapultsports.com")
             
-            st.markdown("---")
-            
-            show_debug = st.checkbox("🔧 Mostrar logs de debug", value=False)
-            
-            if st.button("✅ Conectar e Diagnosticar", type="primary", use_container_width=True):
+            if st.button("✅ Conectar", type="primary", use_container_width=True):
                 if api_token:
-                    with st.spinner("Conectando e descobrindo endpoints..."):
-                        endpoints = discover_endpoints(api_token, api_url)
+                    with st.spinner("Conectando... (leva apenas alguns segundos)"):
+                        endpoints = discover_endpoints_fast(api_token, api_url)
                         
                         if endpoints:
                             st.session_state.api_token = api_token
-                            st.session_state.api_url = endpoints.get('base_url_working', api_url)
+                            st.session_state.api_url = api_url
                             st.session_state.api_headers = {
                                 "Authorization": f"Bearer {api_token}",
                                 "Content-Type": "application/json"
                             }
-                            st.session_state.working_endpoints = endpoints
                             st.session_state.authenticated = True
                             
-                            st.success("✅ Conexão estabelecida com sucesso!")
+                            st.success("✅ Conectado!")
                             
-                            # Mostrar endpoints encontrados
-                            with st.expander("📡 Endpoints encontrados"):
-                                for resource, url in endpoints.items():
-                                    if resource not in ['base_url_working', 'path_working']:
-                                        st.markdown(f"**{resource}:** `{url}`")
-                            
-                            # Tentar carregar atividades
-                            with st.spinner("Carregando atividades iniciais..."):
+                            # Carregar atividades automaticamente
+                            with st.spinner("Carregando atividades..."):
                                 activities = load_activities()
                                 if activities:
                                     st.session_state.activities_list = activities
-                                    st.success(f"✅ {len(activities)} atividades carregadas!")
+                                    st.success(f"✅ {len(activities)} atividades encontradas")
                                     st.rerun()
                                 else:
-                                    st.warning("⚠️ Nenhuma atividade encontrada. Verifique suas permissões.")
+                                    st.warning("⚠️ Nenhuma atividade encontrada")
                         else:
-                            st.error("❌ Não foi possível encontrar os endpoints da API.")
-                            
-                            # Mostrar diagnóstico detalhado
-                            with st.expander("🔍 Diagnóstico detalhado", expanded=True):
-                                st.markdown("**Possíveis causas:**")
-                                st.markdown("""
-                                1. **Token inválido ou mal formatado** - Verifique se copiou o token completo
-                                2. **Token expirado** - Gere um novo token no portal da Catapult
-                                3. **Região incorreta** - Tente América do Norte, Europa ou Ásia
-                                4. **Permissões insuficientes** - O token precisa de acesso aos endpoints
-                                5. **URL base incorreta** - Verifique com o suporte da Catapult
-                                """)
-                                
-                                st.markdown("**Soluções sugeridas:**")
-                                st.markdown("""
-                                - **Limpe o token** - Remova espaços extras ou quebras de linha
-                                - **Teste outra região** - Tente Europa ou Ásia
-                                - **Verifique o token** no site: https://jwt.io (não compartilhe o resultado!)
-                                - **Contate o suporte** da Catapult para confirmar a URL correta
-                                """)
-                            
-                            if show_debug and st.session_state.debug_logs:
-                                st.markdown("### 📋 Logs de Debug")
-                                st.text_area("Debug Logs:", value="\n".join(st.session_state.debug_logs), height=300, key="debug_logs_area")
+                            st.error("❌ Falha na conexão")
+                            st.info("💡 Dica: Verifique se o token está correto e tente outra região")
                 else:
-                    st.warning("⚠️ Por favor, insira o token da API")
-            
-            # Informações adicionais
-            with st.expander("ℹ️ Como obter o token?"):
-                st.markdown("""
-                **Para obter seu token da API Catapult:**
-                
-                1. Acesse o portal da Catapult Sports
-                2. Navegue até **Configurações > API Keys**
-                3. Clique em **"Create New API Key"**
-                4. Selecione as permissões necessárias (pelo menos leitura)
-                5. Copie o token gerado
-                
-                **Importante:** O token deve começar com `eyJ` e ter 3 partes separadas por pontos.
-                """)
+                    st.warning("⚠️ Insira o token")
 
 # ==================== DASHBOARD PRINCIPAL ====================
 
@@ -507,20 +406,9 @@ def main_dashboard():
     st.markdown("---")
     
     # Sidebar
-    st.sidebar.markdown("## 📂 Filtros em Cascata")
+    st.sidebar.markdown("## 📂 Filtros")
     
-    if st.session_state.working_endpoints:
-        st.sidebar.success("✅ API Conectada")
-        
-        # Mostrar URL ativa
-        if 'base_url_working' in st.session_state.working_endpoints:
-            st.sidebar.caption(f"🌐 {st.session_state.working_endpoints['base_url_working']}")
-    else:
-        st.sidebar.error("❌ API não conectada")
-    
-    st.sidebar.markdown("---")
-    
-    # Botão para desconectar
+    # Botão desconectar
     if st.sidebar.button("🚪 Desconectar", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
@@ -532,21 +420,21 @@ def main_dashboard():
     st.sidebar.markdown("### 1️⃣ Atividades")
     
     if st.sidebar.button("🔄 Carregar Atividades", use_container_width=True):
-        with st.spinner("Carregando atividades..."):
+        with st.spinner("Carregando..."):
             activities = load_activities()
             if activities:
                 st.session_state.activities_list = activities
                 st.sidebar.success(f"✅ {len(activities)} atividades")
             else:
-                st.sidebar.error("❌ Nenhuma atividade encontrada")
+                st.sidebar.error("❌ Nenhuma atividade")
     
     if st.session_state.activities_list:
         activity_options = {act['id']: act['name'] for act in st.session_state.activities_list}
-        activity_options_with_all = {None: "📋 Todas as Atividades"}
+        activity_options_with_all = {None: "📋 Todas"}
         activity_options_with_all.update(activity_options)
         
         selected_activity_id = st.sidebar.selectbox(
-            "Selecionar Atividade:",
+            "Atividade:",
             options=list(activity_options_with_all.keys()),
             format_func=lambda x: activity_options_with_all[x]
         )
@@ -563,21 +451,21 @@ def main_dashboard():
     
     if st.session_state.activities_list:
         if st.sidebar.button("🔄 Carregar Equipes", use_container_width=True):
-            with st.spinner("Carregando equipes..."):
+            with st.spinner("Carregando..."):
                 teams = load_teams(st.session_state.selected_activity_id)
                 if teams:
                     st.session_state.teams_list = teams
                     st.sidebar.success(f"✅ {len(teams)} equipes")
                 else:
-                    st.sidebar.error("❌ Nenhuma equipe encontrada")
+                    st.sidebar.error("❌ Nenhuma equipe")
         
         if st.session_state.teams_list:
             team_options = {team['id']: team['name'] for team in st.session_state.teams_list}
-            team_options_with_all = {None: "🏆 Todas as Equipes"}
+            team_options_with_all = {None: "🏆 Todas"}
             team_options_with_all.update(team_options)
             
             selected_team_id = st.sidebar.selectbox(
-                "Selecionar Equipe:",
+                "Equipe:",
                 options=list(team_options_with_all.keys()),
                 format_func=lambda x: team_options_with_all[x]
             )
@@ -587,7 +475,7 @@ def main_dashboard():
         else:
             st.sidebar.warning("⚠️ Clique em 'Carregar Equipes'")
     else:
-        st.sidebar.warning("⚠️ Carregue as atividades primeiro")
+        st.sidebar.warning("⚠️ Carregue atividades primeiro")
     
     st.sidebar.markdown("---")
     
@@ -596,7 +484,7 @@ def main_dashboard():
     
     if st.session_state.teams_list:
         if st.sidebar.button("🔄 Carregar Atletas", use_container_width=True):
-            with st.spinner("Carregando atletas..."):
+            with st.spinner("Carregando..."):
                 players = load_players(
                     st.session_state.selected_team_id,
                     st.session_state.selected_activity_id
@@ -605,15 +493,15 @@ def main_dashboard():
                     st.session_state.players_list = players
                     st.sidebar.success(f"✅ {len(players)} atletas")
                 else:
-                    st.sidebar.error("❌ Nenhum atleta encontrado")
+                    st.sidebar.error("❌ Nenhum atleta")
         
         if st.session_state.players_list:
             player_options = {player['id']: player['name'] for player in st.session_state.players_list}
-            player_options_with_all = {None: "👥 Todos os Atletas"}
+            player_options_with_all = {None: "👥 Todos"}
             player_options_with_all.update(player_options)
             
             selected_player_id = st.sidebar.selectbox(
-                "Selecionar Atleta:",
+                "Atleta:",
                 options=list(player_options_with_all.keys()),
                 format_func=lambda x: player_options_with_all[x]
             )
@@ -623,23 +511,21 @@ def main_dashboard():
         else:
             st.sidebar.warning("⚠️ Clique em 'Carregar Atletas'")
     else:
-        st.sidebar.warning("⚠️ Carregue as equipes primeiro")
+        st.sidebar.warning("⚠️ Carregue equipes primeiro")
     
     st.sidebar.markdown("---")
     
     # ========== PERÍODO ==========
     st.sidebar.markdown("### 4️⃣ Período")
     
-    days = st.sidebar.slider("Últimos dias:", 1, 180, 30)
+    days = st.sidebar.slider("Dias:", 1, 180, 30)
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
-    st.sidebar.info(f"📅 {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}")
+    st.sidebar.caption(f"{start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}")
     
     st.sidebar.markdown("---")
     
     # ========== EVENTOS ==========
-    st.sidebar.markdown("### 5️⃣ Eventos")
-    
     if st.sidebar.button("📊 CARREGAR EVENTOS", type="primary", use_container_width=True):
         if st.session_state.players_list:
             with st.spinner("Carregando eventos..."):
@@ -655,17 +541,16 @@ def main_dashboard():
                 if not df_events.empty:
                     st.sidebar.success(f"✅ {len(df_events)} eventos")
                 else:
-                    st.sidebar.warning("⚠️ Nenhum evento encontrado")
+                    st.sidebar.warning("⚠️ Nenhum evento")
         else:
-            st.sidebar.error("❌ Carregue os atletas primeiro")
+            st.sidebar.error("❌ Carregue atletas primeiro")
     
     # ========== DASHBOARD ==========
     
     if st.session_state.events_data is not None and not st.session_state.events_data.empty:
         df = st.session_state.events_data
         
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Eventos", len(df))
         with col2:
@@ -674,8 +559,6 @@ def main_dashboard():
             st.metric("Equipes", len(st.session_state.teams_list) if st.session_state.teams_list else 0)
         with col4:
             st.metric("Atletas", len(st.session_state.players_list) if st.session_state.players_list else 0)
-        with col5:
-            st.metric("Atividades", len(st.session_state.activities_list) if st.session_state.activities_list else 0)
         
         # Campo
         st.markdown('<div class="sub-header">🏟️ Atividade no Campo</div>', unsafe_allow_html=True)
@@ -686,8 +569,7 @@ def main_dashboard():
                 x=df['pos_x'],
                 y=df['pos_y'],
                 mode='markers',
-                marker=dict(size=10, opacity=0.6),
-                text=df.get('tipo_evento', ['Evento'] * len(df)),
+                marker=dict(size=8, opacity=0.6),
                 hoverinfo='text'
             ))
         
@@ -698,9 +580,9 @@ def main_dashboard():
         st.dataframe(df.head(100), use_container_width=True)
         
     elif st.session_state.events_data is not None:
-        st.warning("⚠️ Nenhum evento encontrado. Tente ajustar os filtros.")
+        st.warning("⚠️ Nenhum evento encontrado")
     else:
-        st.info("👈 Selecione os filtros na sidebar e clique em 'CARREGAR EVENTOS'")
+        st.info("👈 Selecione os filtros e clique em 'CARREGAR EVENTOS'")
 
 # ==================== MAIN ====================
 
