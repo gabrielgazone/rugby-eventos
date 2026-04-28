@@ -7,6 +7,7 @@ import requests
 import json
 import base64
 import numpy as np
+import sys
 
 st.set_page_config(page_title="BIG Report - Rugby Analytics", page_icon="🏉", layout="wide")
 
@@ -28,7 +29,8 @@ def decode_jwt(token):
     except:
         return None
 
-# Inicialização
+if 'step' not in st.session_state:
+    st.session_state.step = 'login'
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'api_headers' not in st.session_state:
@@ -278,78 +280,100 @@ def create_rugby_field():
     )
     return fig
 
-# TELA DE LOGIN
-if not st.session_state.authenticated:
+# LOGIN
+if st.session_state.step == 'login':
     st.title("BIG Report - Catapult Sports")
-    token_input = st.text_area("Token JWT", height=100, type="password")
-    if token_input:
-        decoded = decode_jwt(token_input)
-        if decoded:
-            api_url = decoded.get('iss', 'https://backend-us.openfield.catapultsports.com')
-            st.success("Token valido")
-            st.write("URL: " + api_url)
-            if st.button("Conectar"):
-                st.session_state.api_headers = {"Authorization": "Bearer " + token_input, "Content-Type": "application/json"}
-                st.session_state.api_base = api_url
-                st.session_state.authenticated = True
-                with st.spinner("Carregando atividades..."):
-                    acts = load_activities()
-                    if acts:
-                        st.session_state.activities_list = acts
-                st.rerun()
-        else:
-            st.error("Token invalido")
+    
+    with st.form(key="login_form"):
+        token_input = st.text_input("Token JWT", type="password")
+        submit_button = st.form_submit_button(label="Conectar")
+        
+        if submit_button:
+            if token_input:
+                decoded = decode_jwt(token_input)
+                if decoded:
+                    api_url = decoded.get('iss', 'https://backend-us.openfield.catapultsports.com')
+                    st.success("Token valido")
+                    st.session_state.api_headers = {"Authorization": "Bearer " + token_input, "Content-Type": "application/json"}
+                    st.session_state.api_base = api_url
+                    st.session_state.authenticated = True
+                    st.session_state.step = 'dashboard'
+                    with st.spinner("Carregando atividades..."):
+                        acts = load_activities()
+                        if acts:
+                            st.session_state.activities_list = acts
+                    st.rerun()
+                else:
+                    st.error("Token invalido")
+            else:
+                st.warning("Digite o token")
 
 # DASHBOARD
-else:
+elif st.session_state.step == 'dashboard':
     st.markdown('<div class="main-header">BIG Report - Analisis de Retorno a la Actividad</div>', unsafe_allow_html=True)
+    
     if st.session_state.use_mock:
         st.warning("Modo de demonstracao ativado - Dados simulados")
-    # Sidebar
+    
     st.sidebar.header("Filtros")
-    st.sidebar.subheader("Atividades")
-    if st.sidebar.button("Carregar Atividades"):
+    
+    if st.sidebar.button("Atualizar Atividades"):
         with st.spinner("Carregando..."):
             st.session_state.activities_list = load_activities()
             st.sidebar.success(str(len(st.session_state.activities_list)) + " atividades")
+    
     if st.session_state.activities_list:
-        opts = {None: "Todas"}
+        opts = {"None": "Todas"}
         for a in st.session_state.activities_list:
-            opts[a['id']] = a['name']
-        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
-        st.session_state.selected_activity_id = sel
-        st.session_state.selected_activity_name = opts[sel]
-    st.sidebar.subheader("Equipes")
-    if st.sidebar.button("Carregar Equipes"):
+            opts[str(a['id'])] = a['name']
+        sel = st.sidebar.selectbox("Atividade", list(opts.keys()), format_func=lambda x: opts[x])
+        if sel != "None":
+            st.session_state.selected_activity_id = int(sel)
+            st.session_state.selected_activity_name = opts[sel]
+        else:
+            st.session_state.selected_activity_id = None
+            st.session_state.selected_activity_name = "Todas"
+    
+    if st.sidebar.button("Atualizar Equipes"):
         with st.spinner("Carregando..."):
             st.session_state.teams_list = load_teams(st.session_state.selected_activity_id)
             st.sidebar.success(str(len(st.session_state.teams_list)) + " equipes")
+    
     if st.session_state.teams_list:
-        opts = {None: "Todas"}
+        opts = {"None": "Todas"}
         for t in st.session_state.teams_list:
-            opts[t['id']] = t['name']
-        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
-        st.session_state.selected_team_id = sel
-        st.session_state.selected_team_name = opts[sel]
-    st.sidebar.subheader("Atletas")
-    if st.sidebar.button("Carregar Atletas"):
+            opts[str(t['id'])] = t['name']
+        sel = st.sidebar.selectbox("Equipe", list(opts.keys()), format_func=lambda x: opts[x])
+        if sel != "None":
+            st.session_state.selected_team_id = int(sel)
+            st.session_state.selected_team_name = opts[sel]
+        else:
+            st.session_state.selected_team_id = None
+            st.session_state.selected_team_name = "Todas"
+    
+    if st.sidebar.button("Atualizar Atletas"):
         with st.spinner("Carregando..."):
             st.session_state.players_list = load_players(st.session_state.selected_team_id, st.session_state.selected_activity_id)
             st.sidebar.success(str(len(st.session_state.players_list)) + " atletas")
+    
     if st.session_state.players_list:
-        opts = {None: "Todos"}
+        opts = {"None": "Todos"}
         for p in st.session_state.players_list:
-            opts[p['id']] = p['name']
-        sel = st.sidebar.selectbox("Selecionar", list(opts.keys()), format_func=lambda x: opts[x])
-        st.session_state.selected_player_id = sel
-        st.session_state.selected_player_name = opts[sel]
-    st.sidebar.subheader("Periodo")
+            opts[str(p['id'])] = p['name']
+        sel = st.sidebar.selectbox("Atleta", list(opts.keys()), format_func=lambda x: opts[x])
+        if sel != "None":
+            st.session_state.selected_player_id = int(sel)
+            st.session_state.selected_player_name = opts[sel]
+        else:
+            st.session_state.selected_player_id = None
+            st.session_state.selected_player_name = "Todos"
+    
     days = st.sidebar.slider("Ultimos dias", 1, 180, 30)
     st.session_state.days_period = days
-    st.sidebar.subheader("Tipo de Evento")
+    
     event_types = ["Todos", "Contact", "Tackle", "Ruck", "Maul", "Scrum", "Lineout"]
-    selected_event_type = st.sidebar.selectbox("Filtrar", event_types)
-    st.sidebar.markdown("---")
+    selected_event_type = st.sidebar.selectbox("Tipo de Evento", event_types)
+    
     if st.sidebar.button("CARREGAR EVENTOS", type="primary"):
         with st.spinner("Carregando eventos..."):
             df = load_events(
@@ -360,32 +384,38 @@ else:
             )
             st.session_state.events_df = df
             st.sidebar.success(str(len(df)) + " eventos")
-    if st.sidebar.button("Resetar"):
+    
+    if st.sidebar.button("Resetar Filtros"):
         st.session_state.selected_activity_id = None
         st.session_state.selected_team_id = None
         st.session_state.selected_player_id = None
         st.session_state.events_df = None
         st.rerun()
+    
     if st.sidebar.button("Desconectar"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+    
     st.sidebar.markdown("---")
     st.sidebar.write("**Atividade:** " + st.session_state.selected_activity_name)
     st.sidebar.write("**Equipe:** " + st.session_state.selected_team_name)
     st.sidebar.write("**Atleta:** " + st.session_state.selected_player_name)
-    # Dashboard
+    
     if st.session_state.events_df is not None and not st.session_state.events_df.empty:
         df = st.session_state.events_df.copy()
+        
         if selected_event_type != "Todos" and 'tipo_evento' in df.columns:
             df = df[df['tipo_evento'] == selected_event_type]
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Total Eventos", len(df))
-        c2.metric("Duracao Media", f"{df['duration_min'].mean():.2f} min")
-        c3.metric("Carga Total", f"{df['duration_min'].sum():.2f} min")
-        c4.metric("Confianca Media", f"{df['confidence'].mean():.3f}")
-        c5.metric("Intervalo Medio", f"{df['back_in_game_min'].mean():.2f} min")
-        st.subheader("Mapa de Atividade")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Total Eventos", len(df))
+        col2.metric("Duracao Media", f"{df['duration_min'].mean():.2f} min")
+        col3.metric("Carga Total", f"{df['duration_min'].sum():.2f} min")
+        col4.metric("Confianca Media", f"{df['confidence'].mean():.3f}")
+        col5.metric("Intervalo Medio", f"{df['back_in_game_min'].mean():.2f} min")
+        
+        st.subheader("Mapa de Atividade no Campo")
         fig = create_rugby_field()
         fig.add_trace(go.Scatter(
             x=df['pos_x'], y=df['pos_y'], mode='markers',
@@ -394,31 +424,36 @@ else:
             hoverinfo='text'
         ))
         st.plotly_chart(fig, use_container_width=True)
-        st.subheader("Eventos")
+        
+        st.subheader("Detalhe dos Eventos")
         cols = ['tipo_evento', 'duration_min', 'back_in_game_min', 'confidence']
         if 'equipe' in df.columns:
             cols.insert(1, 'equipe')
         if 'atleta' in df.columns:
             cols.insert(2, 'atleta')
         st.dataframe(df[cols].head(100), use_container_width=True)
-        st.subheader("Analise")
+        
+        st.subheader("Analise de Eventos")
         col1, col2 = st.columns(2)
         with col1:
             counts = df['tipo_evento'].value_counts()
-            fig_pie = px.pie(values=counts.values, names=counts.index, title="Distribuicao")
+            fig_pie = px.pie(values=counts.values, names=counts.index, title="Distribuicao por Tipo")
             st.plotly_chart(fig_pie, use_container_width=True)
         with col2:
-            fig_bar = px.bar(x=range(min(50, len(df))), y=df['duration_min'].head(50), title="Duracao")
+            fig_bar = px.bar(x=range(min(50, len(df))), y=df['duration_min'].head(50), title="Duracao dos Eventos")
             st.plotly_chart(fig_bar, use_container_width=True)
+        
         col3, col4 = st.columns(2)
         with col3:
             fig_line = px.line(x=range(len(df)), y=df['back_in_game_min'], title="Tempo entre Eventos")
             st.plotly_chart(fig_line, use_container_width=True)
         with col4:
-            fig_scatter = px.scatter(x=range(len(df)), y=df['confidence'], title="Confianca", color=df['confidence'])
+            fig_scatter = px.scatter(x=range(len(df)), y=df['confidence'], title="Confianca por Evento", color=df['confidence'])
             st.plotly_chart(fig_scatter, use_container_width=True)
+    
     elif st.session_state.events_df is not None:
-        st.warning("Nenhum evento encontrado")
+        st.warning("Nenhum evento encontrado para os filtros selecionados")
     else:
-        st.info("Selecione os filtros e clique em CARREGAR EVENTOS")
-    st.caption("BIG Report - Catapult Sports")
+        st.info("Selecione os filtros na barra lateral e clique em CARREGAR EVENTOS")
+    
+    st.caption("BIG Report - Catapult Sports API")
