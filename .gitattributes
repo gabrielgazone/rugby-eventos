@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Binários — nunca normalizar quebras de linha
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary

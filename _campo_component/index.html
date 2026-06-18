@@ -8,13 +8,32 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#111;font-family:Arial,sans-serif;color:#eee;overflow:hidden}
     #map{width:100%;height:585px}
-    #panel{background:rgba(10,10,25,.95);padding:7px 12px;
+    #panel{background:rgba(10,10,25,.97);padding:8px 12px;
       display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-      border-top:1px solid #333;min-height:55px}
-    .ctrl{display:flex;align-items:center;gap:6px;font-size:12px}
-    .ctrl label{color:#aaa;white-space:nowrap;min-width:110px}
-    .ctrl input[type=range]{width:100px;accent-color:#2196F3;cursor:pointer}
-    .val{color:#FFD700;font-weight:bold;min-width:32px;display:inline-block}
+      border-top:2px solid #1e3a5f;min-height:58px}
+    .ctrl{display:flex;align-items:center;gap:5px;font-size:12px}
+    .ctrl label{color:#aaa;white-space:nowrap}
+    /* ── Inputs numéricos ── */
+    .ninp{
+      background:#0d1b2a;color:#FFD700;border:1px solid #2196F3;
+      padding:3px 5px;border-radius:4px;font-size:13px;font-weight:bold;
+      text-align:center;outline:none;transition:border-color .15s;
+    }
+    .ninp:focus{border-color:#64B5F6;box-shadow:0 0 0 2px rgba(33,150,243,.25)}
+    .ninp::-webkit-outer-spin-button,.ninp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .ninp[type=number]{-moz-appearance:textfield}
+    /* ── Botões de passo ── */
+    .sbtn{
+      background:#0d1b2a;color:#90CAF9;border:1px solid #2c4a6e;
+      padding:2px 8px;border-radius:4px;cursor:pointer;
+      font-size:14px;font-weight:bold;line-height:1.4;
+      transition:background .12s,color .12s;
+      user-select:none;-webkit-user-select:none;
+    }
+    .sbtn:hover{background:#1565C0;color:#fff;border-color:#2196F3}
+    .sbtn:active{background:#0D47A1}
+    .unit{color:#607d8b;font-size:11px;font-weight:normal}
+    /* ── Botões principais ── */
     .btn{background:#2196F3;color:#fff;border:none;padding:5px 13px;
       border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;white-space:nowrap}
     .btn:hover{background:#1565C0}
@@ -26,44 +45,76 @@
     #status{color:#90CAF9;font-size:11px;max-width:240px;text-align:right}
     .leaflet-overlay-pane{pointer-events:none!important}
     .leaflet-overlay-pane *{pointer-events:none!important}
+    /* separador vertical entre grupos */
+    .sep{width:1px;background:#1e3a5f;height:28px;margin:0 2px}
   </style>
 </head>
 <body>
   <div id='map'></div>
   <div id='panel'>
-    <button class='btn' id='btnC' onclick='toggleCampo()'>🏉 Mostrar Campo</button>
 
+    <button class='btn' id='btnC' onclick='toggleCampo()'>🏉 Mostrar Campo</button>
+    <div class='sep'></div>
+
+    <!-- Lat / Lon -->
     <div class='ctrl'>
-      <label>📍 Lat centro:</label>
-      <input type='number' id='inLat' value='0' step='0.00005'
-        style='width:105px;background:#1a1a2e;color:#FFD700;border:1px solid #555;
-               padding:3px 5px;border-radius:3px;font-size:12px' oninput='onCenter()'>
+      <label>📍 Lat:</label>
+      <input type='number' class='ninp' id='inLat' value='0' step='0.00005'
+        style='width:108px' oninput='onCenter()'>
     </div>
     <div class='ctrl'>
-      <label>📍 Lon centro:</label>
-      <input type='number' id='inLon' value='0' step='0.00005'
-        style='width:105px;background:#1a1a2e;color:#FFD700;border:1px solid #555;
-               padding:3px 5px;border-radius:3px;font-size:12px' oninput='onCenter()'>
+      <label>Lon:</label>
+      <input type='number' class='ninp' id='inLon' value='0' step='0.00005'
+        style='width:108px' oninput='onCenter()'>
     </div>
+    <div class='sep'></div>
+
+    <!-- Rotação com passo fino e grosso -->
     <div class='ctrl'>
-      <label>🧭 Rotação: <span class='val' id='rv'>0</span>°</label>
-      <input type='range' id='rot' min='0' max='359' value='0' oninput='onRot(this.value)'>
+      <label>🧭 Rot:</label>
+      <button class='sbtn' onclick='stepRot(-10)' title='−10°'>«</button>
+      <button class='sbtn' onclick='stepRot(-1)'  title='−1°'>‹</button>
+      <input type='number' class='ninp' id='rot' min='0' max='359' value='0'
+        style='width:50px' oninput='onRot()'>
+      <span class='unit'>°</span>
+      <button class='sbtn' onclick='stepRot(1)'   title='+1°'>›</button>
+      <button class='sbtn' onclick='stepRot(10)'  title='+10°'>»</button>
     </div>
+    <div class='sep'></div>
+
+    <!-- Comprimento -->
     <div class='ctrl'>
-      <label>📏 Comprimento: <span class='val' id='flv'>100</span>m</label>
-      <input type='range' id='fl' min='90' max='110' value='100' oninput='onDim()'>
+      <label>📏 Compr:</label>
+      <button class='sbtn' onclick='stepDim("fl",-1)' title='−1m'>−</button>
+      <input type='number' class='ninp' id='fl' min='90' max='100' value='100'
+        style='width:46px' oninput='onDim()'>
+      <span class='unit'>m</span>
+      <button class='sbtn' onclick='stepDim("fl",1)' title='+1m'>+</button>
     </div>
+
+    <!-- Largura -->
     <div class='ctrl'>
-      <label>📏 Largura: <span class='val' id='fwv'>70</span>m</label>
-      <input type='range' id='fw' min='60' max='80' value='70' oninput='onDim()'>
+      <label>📏 Larg:</label>
+      <button class='sbtn' onclick='stepDim("fw",-1)' title='−1m'>−</button>
+      <input type='number' class='ninp' id='fw' min='60' max='70' value='70'
+        style='width:46px' oninput='onDim()'>
+      <span class='unit'>m</span>
+      <button class='sbtn' onclick='stepDim("fw",1)' title='+1m'>+</button>
     </div>
+
+    <!-- Margem -->
     <div class='ctrl'>
-      <label>🔚 In-goal: <span class='val' id='igv'>10</span>m</label>
-      <input type='range' id='ig' min='5' max='15' value='10' oninput='onDim()'>
+      <label>📐 In-goal:</label>
+      <button class='sbtn' onclick='stepDim("ig",-1)' title='−1m'>−</button>
+      <input type='number' class='ninp' id='ig' min='6' max='22' value='10'
+        style='width:40px' oninput='onDim()'>
+      <span class='unit'>m</span>
+      <button class='sbtn' onclick='stepDim("ig",1)' title='+1m'>+</button>
     </div>
+    <div class='sep'></div>
 
     <button id='btnApply' onclick='aplicar()'>✅ Aplicar Campo</button>
-    <span id='status'>📍 Ajuste Lat/Lon acima · ↑↓ teclado ≈ 5m</span>
+    <span id='status'>📍 Arraste ⊙ ou edite Lat/Lon · botões «‹›» ajustam rotação</span>
   </div>
 
   <script>
@@ -72,24 +123,22 @@
   var campoOn=false;
   var map=null, cm=null, cl=null;
   var initialized=false;
+  var baseLayers=[];
 
   // ── Protocolo Streamlit ─────────────────────────────────────────────
-  // 1. Avisar que o componente está pronto
   window.parent.postMessage({
     isStreamlitMessage:true, type:'streamlit:componentReady', apiVersion:1
   }, '*');
 
-  // 2. Receber os dados do Python (streamlit:render)
   window.addEventListener('message', function(e){
     if(!e.data || typeof e.data !== 'object') return;
     if(e.data.type === 'streamlit:render' && !initialized){
       var a = e.data.args || {};
-      initMap(a.pts||[], a.lat_c||0, a.lon_c||0);
+      initMap(a.pts||[], a.lat_c||0, a.lon_c||0, a.rot||0, a.fl||100, a.fw||70, a.legend||null);
       initialized = true;
     }
   });
 
-  // 3. Enviar valor de volta quando o usuário clicar "Aplicar"
   function aplicar(){
     window.parent.postMessage({
       isStreamlitMessage:true,
@@ -102,25 +151,29 @@
     b.classList.add('done');
     b.onclick = null;
     document.getElementById('status').textContent =
-      '🔒 '+cLat.toFixed(5)+', '+cLon.toFixed(5)+' · rot '+rotD+'°';
+      '🔒 '+cLat.toFixed(5)+', '+cLon.toFixed(5)+' · rot '+rotD+'° · '+fL+'×'+fW+'m';
   }
 
   // ── Inicialização do mapa ────────────────────────────────────────────
-  function initMap(pts, lat_c, lon_c){
+  function initMap(pts, lat_c, lon_c, rot, fl, fw, legend){
     cLat = lat_c; cLon = lon_c;
+    // Pré-popula com dados do venue (se fornecidos pelo Python)
+    rotD = +rot || 0;
+    fL   = +fl  || 100;
+    fW   = +fw  || 70;
     document.getElementById('inLat').value = cLat.toFixed(6);
     document.getElementById('inLon').value = cLon.toFixed(6);
+    document.getElementById('rot').value   = rotD;
+    document.getElementById('fl').value    = fL;
+    document.getElementById('fw').value    = fW;
 
-    map = L.map('map').setView([cLat, cLon], 17);
+    map = L.map('map', {maxZoom: 21}).setView([cLat, cLon], 18);
 
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      {attribution:'Esri World Imagery', maxZoom:19}
-    ).addTo(map);
-    L.tileLayer(
-      'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-      {attribution:'Esri Labels', opacity:0.6, maxZoom:19}
-    ).addTo(map);
+    L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      subdomains: ['mt0','mt1','mt2','mt3'],
+      attribution: '© Google Satellite',
+      maxZoom: 21, maxNativeZoom: 21
+    }).addTo(map);
 
     // Trajetória GPS colorida
     function vc(v){
@@ -173,7 +226,6 @@
       document.getElementById('status').textContent='🎯 '+cLat.toFixed(5)+', '+cLon.toFixed(5);
     });
 
-    // Grupo de camadas do campo
     cl = L.layerGroup().addTo(map);
 
     // Legenda de velocidade
@@ -182,18 +234,29 @@
       var d = L.DomUtil.create('div');
       d.style='background:rgba(0,0,0,.78);padding:8px 11px;border-radius:6px;'+
               'color:#fff;font-size:11px;line-height:1.9';
-      d.innerHTML='<b>Velocidade</b><br>'
-        +'<span style="color:#2196F3">■</span> &lt;7 km/h Caminhada<br>'
-        +'<span style="color:#4CAF50">■</span> 7-14 km/h Trote<br>'
-        +'<span style="color:#FFEB3B">■</span> 14-19 km/h Corrida<br>'
-        +'<span style="color:#FF9800">■</span> 19-24 km/h Intensa<br>'
-        +'<span style="color:#F44336">■</span> &gt;24 km/h Sprint';
+      function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+      var html='<b>Velocidade</b><br>';
+      if(legend && legend.length){
+        for(var li=0; li<legend.length; li++){
+          var it = legend[li] || {};
+          html += '<span style="color:'+(it.color||'#888')+'">■</span> '
+                + esc(it.text||'') + (li<legend.length-1 ? '<br>' : '');
+        }
+      } else {
+        // Fallback (caso o Python não envie as bandas)
+        html += '<span style="color:#2196F3">■</span> &lt;7 km/h Caminhada<br>'
+              + '<span style="color:#4CAF50">■</span> 7-14.4 km/h Trote<br>'
+              + '<span style="color:#CDDC39">■</span> 14.4-19.8 km/h Corrida<br>'
+              + '<span style="color:#FF9800">■</span> 19.8-25.2 km/h Intensa<br>'
+              + '<span style="color:#FF5722">■</span> 25.2-29.9 km/h Alta Vel.<br>'
+              + '<span style="color:#F44336">■</span> &gt;29.9 km/h Sprint';
+      }
+      d.innerHTML = html;
       L.DomEvent.disableClickPropagation(d);
       return d;
     };
     leg.addTo(map);
 
-    // Ajustar altura do frame
     window.parent.postMessage({
       isStreamlitMessage:true, type:'streamlit:setFrameHeight', height:700
     }, '*');
@@ -216,20 +279,36 @@
     document.getElementById('status').textContent='🎯 '+cLat.toFixed(5)+', '+cLon.toFixed(5);
   }
 
-  function onRot(v){
-    rotD=+v;
-    document.getElementById('rv').textContent=v;
+  /* Rotação — lê diretamente do input, garante 0-359 */
+  function onRot(){
+    var v=+document.getElementById('rot').value;
+    v=((v%360)+360)%360;
+    document.getElementById('rot').value=v;
+    rotD=v;
     drawField();
   }
+  function stepRot(d){
+    var el=document.getElementById('rot');
+    var v=((+el.value+d)%360+360)%360;
+    el.value=v;
+    rotD=v;
+    drawField();
+    document.getElementById('status').textContent='🧭 Rotação: '+rotD+'°';
+  }
 
+  /* Dimensões */
   function onDim(){
     fL=+document.getElementById('fl').value;
     fW=+document.getElementById('fw').value;
     fI=+document.getElementById('ig').value;
-    document.getElementById('flv').textContent=fL;
-    document.getElementById('fwv').textContent=fW;
-    document.getElementById('igv').textContent=fI;
     drawField();
+  }
+  function stepDim(id,d){
+    var el=document.getElementById(id);
+    var mn=parseFloat(el.min)||0;
+    var mx=parseFloat(el.max)||999;
+    el.value=Math.max(mn,Math.min(mx,+el.value+d));
+    onDim();
   }
 
   function toggleCampo(){
@@ -239,8 +318,8 @@
     b.className=campoOn?'btn on':'btn';
     drawField();
     document.getElementById('status').textContent=campoOn
-      ?'✅ Arraste ⊙ para mover · sliders para ajustar em tempo real'
-      :'📍 Ajuste Lat/Lon acima · ↑↓ teclado ≈ 5m';
+      ?'✅ Arraste ⊙ para mover · «‹›» ajustam rotação · ±1m nas dimensões'
+      :'📍 Arraste ⊙ ou edite Lat/Lon · botões «‹›» ajustam rotação';
   }
 
   // ── Geometria do campo ───────────────────────────────────────────────
@@ -257,28 +336,39 @@
     L.polyline(lc(pts), Object.assign({interactive:false},opt)).addTo(cl);
   }
 
+  // -- Campo de Rugby (medidas World Rugby oficiais) --────────────────────
   function drawField(){
     if(!cl) return;
     cl.clearLayers();
     if(!campoOn) return;
-    var w={color:'white',weight:2,opacity:.9};
-    var wb={color:'white',weight:3,opacity:.9};
-    var gd={color:'#FFD700',weight:3,opacity:1,interactive:false};
-    pl([[-fI,0],[fL+fI,0],[fL+fI,fW],[-fI,fW],[-fI,0]], w);
-    pl([[0,0],[0,fW]], wb);
-    pl([[fL,0],[fL,fW]], wb);
+    var w     = {color:'white', weight:2,   opacity:.9};
+    var wb    = {color:'white', weight:3,   opacity:.9};
+    var wdash = {color:'white', weight:1.6, opacity:.85, dashArray:'8 6'};
+    var wdot  = {color:'white', weight:1.2, opacity:.7,  dashArray:'2 6'};
+    var gd    = {color:'#FFD700', weight:4, opacity:1, interactive:false};
+    var ig = fI;
+
+    // Áreas de in-goal
+    pl([[-ig,0],[0,0],[0,fW],[-ig,fW],[-ig,0]], w);
+    pl([[fL,0],[fL+ig,0],[fL+ig,fW],[fL,fW],[fL,0]], w);
+    // Perímetro do campo de jogo + linhas de gol
+    pl([[0,0],[fL,0],[fL,fW],[0,fW],[0,0]], wb);
+    // Linha central (50m)
     pl([[fL/2,0],[fL/2,fW]], w);
-    pl([[22,0],[22,fW]], Object.assign({},w,{dashArray:'6 4'}));
-    pl([[fL-22,0],[fL-22,fW]], Object.assign({},w,{dashArray:'6 4'}));
-    pl([[10,0],[10,fW]], Object.assign({},w,{dashArray:'2 4'}));
-    pl([[fL-10,0],[fL-10,fW]], Object.assign({},w,{dashArray:'2 4'}));
-    pl([[15,0],[15,fW]], Object.assign({},w,{weight:1,dashArray:'2 2'}));
-    pl([[fL-15,0],[fL-15,fW]], Object.assign({},w,{weight:1,dashArray:'2 2'}));
-    var cy1=fW/2-3.4, cy2=fW/2+3.4;
-    L.polyline([geo(-fL/2,cy1-fW/2),geo(-fL/2,cy2-fW/2)],gd).addTo(cl);
-    L.polyline([geo(-fL/2,0),geo(-5-fL/2,0)],gd).addTo(cl);
-    L.polyline([geo(fL/2,cy1-fW/2),geo(fL/2,cy2-fW/2)],gd).addTo(cl);
-    L.polyline([geo(fL/2,0),geo(fL/2+5,0)],gd).addTo(cl);
+    // Linhas de 22m
+    pl([[22,0],[22,fW]], wdash);
+    pl([[fL-22,0],[fL-22,fW]], wdash);
+    // Linhas de 10m
+    pl([[fL/2-10,0],[fL/2-10,fW]], wdot);
+    pl([[fL/2+10,0],[fL/2+10,fW]], wdot);
+    // Linhas de 5m
+    pl([[5,0],[5,fW]], wdot);
+    pl([[fL-5,0],[fL-5,fW]], wdot);
+    // Traves em H (douradas) nas linhas de gol
+    L.polyline([geo(-fL/2,-2.8),geo(-fL/2,2.8)], gd).addTo(cl);
+    L.polyline([geo(fL/2,-2.8),geo(fL/2,2.8)], gd).addTo(cl);
+    // Ponto central
+    L.circleMarker(geo(0,0), {radius:3,color:'white',fillColor:'white',fillOpacity:1,weight:1,interactive:false}).addTo(cl);
   }
   </script>
 </body>
