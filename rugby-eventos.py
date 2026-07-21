@@ -995,22 +995,20 @@ def desenhar_campo_rugby(field_length=100, field_width=70, in_goal_depth=10):
     # Linhas de gol (try lines)
     fig.add_shape(type="line", x0=0,  y0=0, x1=0,  y1=FW, line=dict(color="white", width=3))
     fig.add_shape(type="line", x0=FL, y0=0, x1=FL, y1=FW, line=dict(color="white", width=3))
-    # Linhas de 22m
-    fig.add_shape(type="line", x0=22,    y0=0, x1=22,    y1=FW, line=dict(color="white", width=1.5, dash="dash"))
-    fig.add_shape(type="line", x0=FL-22, y0=0, x1=FL-22, y1=FW, line=dict(color="white", width=1.5, dash="dash"))
-    # Linhas de 10m (tracejado pontilhado a partir do meio)
-    fig.add_shape(type="line", x0=FL/2-10, y0=0, x1=FL/2-10, y1=FW, line=dict(color="white", width=1, dash="dot"))
-    fig.add_shape(type="line", x0=FL/2+10, y0=0, x1=FL/2+10, y1=FW, line=dict(color="white", width=1, dash="dot"))
-    # Linha central (50m)
+    # Linhas de 22m — CONTÍNUAS (Lei 1)
+    fig.add_shape(type="line", x0=22,    y0=0, x1=22,    y1=FW, line=dict(color="white", width=1.8))
+    fig.add_shape(type="line", x0=FL-22, y0=0, x1=FL-22, y1=FW, line=dict(color="white", width=1.8))
+    # Linhas de 10m — TRACEJADAS (Lei 1)
+    fig.add_shape(type="line", x0=FL/2-10, y0=0, x1=FL/2-10, y1=FW, line=dict(color="white", width=1.2, dash="dash"))
+    fig.add_shape(type="line", x0=FL/2+10, y0=0, x1=FL/2+10, y1=FW, line=dict(color="white", width=1.2, dash="dash"))
+    # Linha de meio-campo (50m) — CONTÍNUA
     fig.add_shape(type="line", x0=FL/2, y0=0, x1=FL/2, y1=FW, line=dict(color="white", width=2))
-    # Linhas de 5m (próximas às linhas de gol)
-    fig.add_shape(type="line", x0=5,    y0=0, x1=5,    y1=FW, line=dict(color="white", width=0.5, dash="dot"))
-    fig.add_shape(type="line", x0=FL-5, y0=0, x1=FL-5, y1=FW, line=dict(color="white", width=0.5, dash="dot"))
-    # Traves em H (postes douradas)
-    cby = cy - 2.8
-    for gx, dx in [(0, -5), (FL, 5)]:
-        fig.add_shape(type="line", x0=gx, y0=cby, x1=gx, y1=cby+5.6, line=dict(color="#FFD700", width=3))
-        fig.add_shape(type="line", x0=gx, y0=cy,  x1=gx+dx, y1=cy,    line=dict(color="#FFD700", width=3))
+    # Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)
+    fig.add_shape(type="line", x0=5,    y0=0, x1=5,    y1=FW, line=dict(color="white", width=1, dash="dash"))
+    fig.add_shape(type="line", x0=FL-5, y0=0, x1=FL-5, y1=FW, line=dict(color="white", width=1, dash="dash"))
+    # Traves em H — 2 postes a 5,6m + travessão (Lei 1)
+    for gx in [0, FL]:
+        fig.add_shape(type="line", x0=gx, y0=cy-2.8, x1=gx, y1=cy+2.8, line=dict(color="#FFD700", width=4))
     # Ponto central
     fig.add_trace(go.Scatter(x=[FL/2], y=[cy], mode='markers',
                              marker=dict(size=6, color='white'), showlegend=False))
@@ -1914,35 +1912,38 @@ def desenhar_campo_rugby_bonito(field_length=100, field_width=70, margin=3, titl
     for gx in [0, FL]:
         fig.add_shape(type="line", x0=gx, y0=0, x1=gx, y1=FW, line=dict(color="white", width=3))
 
-    # Linhas de 22m
+    # Linhas de 22m — CONTÍNUAS (Lei 1: linhas sólidas)
     for xv in [22, FL-22]:
         _glow(xv, 0, xv, FW)
         fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW,
-                      line=dict(color="white", width=1.8, dash="dash"))
+                      line=dict(color="white", width=2))
 
-    # Linha central (50m)
+    # Linha de meio-campo — CONTÍNUA (Lei 1)
     fig.add_shape(type="line", x0=FL/2, y0=0, x1=FL/2, y1=FW,
                   line=dict(color="white", width=2))
 
-    # Linhas de 10m (tracejado pontilhado dos dois lados do meio)
+    # Linhas de 10m — TRACEJADAS (Lei 1: traços de 5m, paralelas ao meio-campo)
     for xv in [FL/2-10, FL/2+10]:
         fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW,
-                      line=dict(color="rgba(255,255,255,0.85)", width=1.2, dash="dot"))
+                      line=dict(color="rgba(255,255,255,0.85)", width=1.6, dash="dash"))
 
-    # Linhas de 5m (proximas as linhas de gol)
+    # Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)
     for xv in [5, FL-5]:
         fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW,
-                      line=dict(color="rgba(255,255,255,0.6)", width=0.8, dash="dot"))
+                      line=dict(color="rgba(255,255,255,0.6)", width=1.2, dash="dash"))
 
-    # Marcas curtas a 5m e 15m do touch
-    for yv in [5, FW-5, 15, FW-15]:
-        for xseg in np.arange(0, FL, 5):
-            fig.add_shape(type="line", x0=xseg+1, y0=yv, x1=xseg+2, y1=yv,
-                          line=dict(color="rgba(255,255,255,0.35)", width=0.8))
+    # Linhas de 5m e 15m paralelas às laterais (touchlines) — TRACEJADAS (Lei 1)
+    for yv in [5, 15, FW-15, FW-5]:
+        fig.add_shape(type="line", x0=0, y0=yv, x1=FL, y1=yv,
+                      line=dict(color="rgba(255,255,255,0.5)", width=1.0, dash="dash"))
+
+    # Marca de 0,5m no centro da linha de meio-campo (Lei 1)
+    fig.add_shape(type="line", x0=FL/2, y0=cy-0.25, x1=FL/2, y1=cy+0.25,
+                  line=dict(color="white", width=5))
 
     # Ponto central
     fig.add_trace(go.Scatter(x=[FL/2], y=[cy], mode='markers',
-                             marker=dict(size=7, color='white',
+                             marker=dict(size=6, color='white',
                                          line=dict(color='rgba(0,0,0,0.5)', width=1)),
                              showlegend=False, hoverinfo='skip', name='_ctr'))
 
@@ -1953,14 +1954,18 @@ def desenhar_campo_rugby_bonito(field_length=100, field_width=70, margin=3, titl
                                              line=dict(color='rgba(0,0,0,0.5)', width=1)),
                                  showlegend=False, hoverinfo='skip', name='_flag'))
 
-    # Traves em H (postes douradas nas linhas de gol)
+    # Traves em H nas linhas de try — 2 postes a 5,6m + travessão (Lei 1)
     post_gap = 5.6
     py1, py2 = cy - post_gap/2, cy + post_gap/2
-    gd_line = dict(color="#FFD700", width=3)
-    for gx, dx in [(0, -6), (FL, 6)]:
-        fig.add_shape(type="line", x0=gx, y0=py1, x1=gx, y1=py2, line=gd_line)
-        fig.add_shape(type="line", x0=gx, y0=py1, x1=gx+dx, y1=py1, line=dict(color="#FFD700", width=2))
-        fig.add_shape(type="line", x0=gx, y0=py2, x1=gx+dx, y1=py2, line=dict(color="#FFD700", width=2))
+    for gx in [0, FL]:
+        # travessão (segmento dourado entre os postes, sobre a linha de try)
+        fig.add_shape(type="line", x0=gx, y0=py1, x1=gx, y1=py2,
+                      line=dict(color="#FFD700", width=4))
+        # postes (marcadores douradas)
+        fig.add_trace(go.Scatter(x=[gx, gx], y=[py1, py2], mode='markers',
+                                 marker=dict(size=9, color='#FFD700',
+                                             line=dict(color='rgba(0,0,0,0.5)', width=1)),
+                                 showlegend=False, hoverinfo='skip', name='_post'))
 
     # Labels das linhas
     lkw = dict(showarrow=False, font=dict(color='rgba(255,255,255,0.45)', size=8,
@@ -2461,15 +2466,15 @@ def criar_mapa_satelite_rugby(
                   (field_length,field_width),(field_length,0)], weight=2)
         # Linha central (50m)
         add_line([(field_length/2, 0), (field_length/2, field_width)], weight=2)
-        # Linhas de 22m
-        add_line([(22, 0), (22, field_width)], weight=2, dash="8,6")
-        add_line([(field_length-22, 0), (field_length-22, field_width)], weight=2, dash="8,6")
-        # Linhas de 10m
-        add_line([(field_length/2-10, 0), (field_length/2-10, field_width)], weight=1, dash="3,6")
-        add_line([(field_length/2+10, 0), (field_length/2+10, field_width)], weight=1, dash="3,6")
-        # Linhas de 5m
-        add_line([(5, 0), (5, field_width)], weight=1, dash="2,6")
-        add_line([(field_length-5, 0), (field_length-5, field_width)], weight=1, dash="2,6")
+        # Linhas de 22m — CONTÍNUAS (Lei 1)
+        add_line([(22, 0), (22, field_width)], weight=2)
+        add_line([(field_length-22, 0), (field_length-22, field_width)], weight=2)
+        # Linhas de 10m — TRACEJADAS (Lei 1)
+        add_line([(field_length/2-10, 0), (field_length/2-10, field_width)], weight=1.2, dash="8,6")
+        add_line([(field_length/2+10, 0), (field_length/2+10, field_width)], weight=1.2, dash="8,6")
+        # Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)
+        add_line([(5, 0), (5, field_width)], weight=1, dash="8,6")
+        add_line([(field_length-5, 0), (field_length-5, field_width)], weight=1, dash="8,6")
         # Traves em H (douradas) nas linhas de gol
         folium.PolyLine([pt(0-cx, FW_h-2.8-cy), pt(0-cx, FW_h+2.8-cy)],
                         color="#FFD700", weight=3, opacity=1).add_to(campo_group)
@@ -2638,11 +2643,11 @@ def criar_html_campo_interativo(lats_gps, lons_gps, vels_gps, atleta_nome, heigh
         "    </div>\n"
         "    <div class='ctrl'>\n"
         "      <label>📏 Comprimento: <span class='val' id='flv'>100</span>m</label>\n"
-        "      <input type='range' id='fl' min='90' max='100' value='100' oninput='onDim()'>\n"
+        "      <input type='range' id='fl' min='94' max='100' value='100' oninput='onDim()'>\n"
         "    </div>\n"
         "    <div class='ctrl'>\n"
         "      <label>📏 Largura: <span class='val' id='fwv'>70</span>m</label>\n"
-        "      <input type='range' id='fw' min='60' max='70' value='70' oninput='onDim()'>\n"
+        "      <input type='range' id='fw' min='68' max='70' value='70' oninput='onDim()'>\n"
         "    </div>\n"
         "    <div class='ctrl'>\n"
         "      <label>📐 In-goal: <span class='val' id='igv'>10</span>m</label>\n"
@@ -2752,16 +2757,21 @@ def criar_html_campo_interativo(lats_gps, lons_gps, vels_gps, atleta_nome, heigh
         "    pl([[0,0],[FL,0],[FL,FW],[0,FW],[0,0]],wb);\n"
         "    // Linha central (50m)\n"
         "    pl([[FL/2,0],[FL/2,FW]],w);\n"
-        "    // Linhas de 22m\n"
-        "    pl([[22,0],[22,FW]],wdash);\n"
-        "    pl([[FL-22,0],[FL-22,FW]],wdash);\n"
-        "    // Linhas de 10m\n"
-        "    pl([[FL/2-10,0],[FL/2-10,FW]],wdot);\n"
-        "    pl([[FL/2+10,0],[FL/2+10,FW]],wdot);\n"
-        "    // Linhas de 5m\n"
-        "    pl([[5,0],[5,FW]],wdot);\n"
-        "    pl([[FL-5,0],[FL-5,FW]],wdot);\n"
-        "    // Traves em H (postes douradas nas linhas de gol)\n"
+        "    // Linhas de 22m — CONTÍNUAS (Lei 1)\n"
+        "    pl([[22,0],[22,FW]],w);\n"
+        "    pl([[FL-22,0],[FL-22,FW]],w);\n"
+        "    // Linhas de 10m — TRACEJADAS (Lei 1)\n"
+        "    pl([[FL/2-10,0],[FL/2-10,FW]],wdash);\n"
+        "    pl([[FL/2+10,0],[FL/2+10,FW]],wdash);\n"
+        "    // Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)\n"
+        "    pl([[5,0],[5,FW]],wdash);\n"
+        "    pl([[FL-5,0],[FL-5,FW]],wdash);\n"
+        "    // Linhas de 5m e 15m paralelas às laterais — TRACEJADAS (Lei 1)\n"
+        "    pl([[0,5],[FL,5]],wdash); pl([[0,15],[FL,15]],wdash);\n"
+        "    pl([[0,FW-15],[FL,FW-15]],wdash); pl([[0,FW-5],[FL,FW-5]],wdash);\n"
+        "    // Marca de 0,5m no centro da linha de meio-campo (Lei 1)\n"
+        "    pl([[FL/2,FW/2-0.25],[FL/2,FW/2+0.25]],wb);\n"
+        "    // Traves em H (postes douradas nas linhas de try)\n"
         "    var pg=2.8;\n"
         "    L.polyline([geo(-FL/2,-pg),geo(-FL/2,pg)],gd).addTo(cl);\n"
         "    L.polyline([geo(FL/2,-pg),geo(FL/2,pg)],gd).addTo(cl);\n"
@@ -2949,15 +2959,15 @@ def criar_html_campo_fixo(lats_gps, lons_gps, vels_gps, campo_config,
         "    pl([[0,0],[fL,0],[fL,fW],[0,fW],[0,0]],wb);\n"
         "    // Linha central (50m)\n"
         "    pl([[fL/2,0],[fL/2,fW]],w);\n"
-        "    // Linhas de 22m\n"
-        "    pl([[22,0],[22,fW]],wdash);\n"
-        "    pl([[fL-22,0],[fL-22,fW]],wdash);\n"
-        "    // Linhas de 10m\n"
-        "    pl([[fL/2-10,0],[fL/2-10,fW]],wdot);\n"
-        "    pl([[fL/2+10,0],[fL/2+10,fW]],wdot);\n"
-        "    // Linhas de 5m\n"
-        "    pl([[5,0],[5,fW]],wdot);\n"
-        "    pl([[fL-5,0],[fL-5,fW]],wdot);\n"
+        "    // Linhas de 22m — CONTÍNUAS (Lei 1)\n"
+        "    pl([[22,0],[22,fW]],w);\n"
+        "    pl([[fL-22,0],[fL-22,fW]],w);\n"
+        "    // Linhas de 10m — TRACEJADAS (Lei 1)\n"
+        "    pl([[fL/2-10,0],[fL/2-10,fW]],wdash);\n"
+        "    pl([[fL/2+10,0],[fL/2+10,fW]],wdash);\n"
+        "    // Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)\n"
+        "    pl([[5,0],[5,fW]],wdash);\n"
+        "    pl([[fL-5,0],[fL-5,fW]],wdash);\n"
         "    // Traves em H (douradas)\n"
         "    L.polyline([geo(-fL/2,-2.8),geo(-fL/2,2.8)],gd).addTo(cl);\n"
         "    L.polyline([geo(fL/2,-2.8),geo(fL/2,2.8)],gd).addTo(cl);\n"
@@ -3767,12 +3777,12 @@ def _tatica_add_campo_shapes(fig, FL, FW, line_color='rgba(255,255,255,0.85)', i
         fig.add_shape(type="rect", x0=x0, y0=0, x1=x1, y1=FW, line=L, layer='above')
     # Linha central (50m)
     fig.add_shape(type="line", x0=FL / 2, y0=0, x1=FL / 2, y1=FW, line=L, layer='above')
-    # Linhas de 22m
+    # Linhas de 22m — CONTÍNUAS (Lei 1)
     for xv in [22, FL - 22]:
-        fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW, line=Ld, layer='above')
-    # Linhas de 10m
+        fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW, line=L, layer='above')
+    # Linhas de 10m — TRACEJADAS (Lei 1)
     for xv in [FL / 2 - 10, FL / 2 + 10]:
-        fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW, line=Ldot, layer='above')
+        fig.add_shape(type="line", x0=xv, y0=0, x1=xv, y1=FW, line=Ld, layer='above')
     # Traves em H (douradas)
     gd = dict(color='#FFD700', width=2)
     for gx in [0, FL]:

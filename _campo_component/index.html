@@ -86,7 +86,7 @@
     <div class='ctrl'>
       <label>📏 Compr:</label>
       <button class='sbtn' onclick='stepDim("fl",-1)' title='−1m'>−</button>
-      <input type='number' class='ninp' id='fl' min='90' max='100' value='100'
+      <input type='number' class='ninp' id='fl' min='94' max='100' value='100'
         style='width:46px' oninput='onDim()'>
       <span class='unit'>m</span>
       <button class='sbtn' onclick='stepDim("fl",1)' title='+1m'>+</button>
@@ -96,7 +96,7 @@
     <div class='ctrl'>
       <label>📏 Larg:</label>
       <button class='sbtn' onclick='stepDim("fw",-1)' title='−1m'>−</button>
-      <input type='number' class='ninp' id='fw' min='60' max='70' value='70'
+      <input type='number' class='ninp' id='fw' min='68' max='70' value='70'
         style='width:46px' oninput='onDim()'>
       <span class='unit'>m</span>
       <button class='sbtn' onclick='stepDim("fw",1)' title='+1m'>+</button>
@@ -348,23 +348,28 @@
     var gd    = {color:'#FFD700', weight:4, opacity:1, interactive:false};
     var ig = fI;
 
-    // Áreas de in-goal
+    // Áreas de in-goal (linhas de bola morta + laterais do in-goal — contínuas)
     pl([[-ig,0],[0,0],[0,fW],[-ig,fW],[-ig,0]], w);
     pl([[fL,0],[fL+ig,0],[fL+ig,fW],[fL,fW],[fL,0]], w);
-    // Perímetro do campo de jogo + linhas de gol
+    // Perímetro do campo de jogo + linhas de try (contínuas)
     pl([[0,0],[fL,0],[fL,fW],[0,fW],[0,0]], wb);
-    // Linha central (50m)
+    // Linha de meio-campo (50m) — CONTÍNUA
     pl([[fL/2,0],[fL/2,fW]], w);
-    // Linhas de 22m
-    pl([[22,0],[22,fW]], wdash);
-    pl([[fL-22,0],[fL-22,fW]], wdash);
-    // Linhas de 10m
-    pl([[fL/2-10,0],[fL/2-10,fW]], wdot);
-    pl([[fL/2+10,0],[fL/2+10,fW]], wdot);
-    // Linhas de 5m
-    pl([[5,0],[5,fW]], wdot);
-    pl([[fL-5,0],[fL-5,fW]], wdot);
-    // Traves em H (douradas) nas linhas de gol
+    // Linhas de 22m — CONTÍNUAS (Lei 1)
+    pl([[22,0],[22,fW]], w);
+    pl([[fL-22,0],[fL-22,fW]], w);
+    // Linhas de 10m — TRACEJADAS (Lei 1)
+    pl([[fL/2-10,0],[fL/2-10,fW]], wdash);
+    pl([[fL/2+10,0],[fL/2+10,fW]], wdash);
+    // Linhas de 5m das linhas de try — TRACEJADAS (Lei 1)
+    pl([[5,0],[5,fW]], wdash);
+    pl([[fL-5,0],[fL-5,fW]], wdash);
+    // Linhas de 5m e 15m paralelas às laterais — TRACEJADAS (Lei 1)
+    pl([[0,5],[fL,5]], wdash);           pl([[0,15],[fL,15]], wdash);
+    pl([[0,fW-15],[fL,fW-15]], wdash);   pl([[0,fW-5],[fL,fW-5]], wdash);
+    // Marca de 0,5m no centro da linha de meio-campo (Lei 1)
+    pl([[fL/2,fW/2-0.25],[fL/2,fW/2+0.25]], wb);
+    // Traves em H (douradas) nas linhas de try — postes a 5,6m
     L.polyline([geo(-fL/2,-2.8),geo(-fL/2,2.8)], gd).addTo(cl);
     L.polyline([geo(fL/2,-2.8),geo(fL/2,2.8)], gd).addTo(cl);
     // Ponto central
